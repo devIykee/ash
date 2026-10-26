@@ -102,7 +102,7 @@ Without `DATABASE_URL`, a normal local process uses the JSON file. On Vercel, a 
 
 ## Deployment
 
-The production build is Vercel-compatible. Deployment was not performed in this repository because no Vercel or database credentials are configured. Steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Production is https://ash-nu-khaki.vercel.app. The app uses Neon Postgres and the simulated testnet adapter. Setup steps and the checks that were run are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Implementation status
 

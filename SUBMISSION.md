@@ -34,11 +34,13 @@ Files are encrypted in the browser with AES-256-GCM. The content key is split wi
 | Viewing-key grants | Partial. Disclosures and filtered reports only |
 | Chain verification of shielded amount | Not implemented |
 | Wallet broadcast, FROST, automatic shielded debit | Planned |
-| Hosted demo | Not deployed |
+| Hosted demo | https://ash-nu-khaki.vercel.app |
 
 ## Demo
 
-Placeholder URL: `https://ash.example.invalid`
+URL: https://ash-nu-khaki.vercel.app
+
+Repository: https://github.com/devIykee/ash
 
 Placeholder video: `https://video.example.invalid/ash`
 

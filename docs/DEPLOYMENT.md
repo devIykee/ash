@@ -1,6 +1,10 @@
 # Deployment
 
-ASH builds as a Next.js application and can be deployed to Vercel. This repository has not been deployed. No Vercel project, token, or hosted database was available, so there is no production URL to claim.
+ASH builds as a Next.js application and is deployed on Vercel.
+
+Production: https://ash-nu-khaki.vercel.app
+
+The Vercel project is `ash` on the `iykes-projects-dc0db0ed` team. GitHub `devIykee/ash` `main` deploys to production. Postgres is Neon on the free plan, connected as `DATABASE_URL`. Payment mode is `simulated` on testnet. `/api/ash/health` returns `status: "ok"`, `usingDevSecrets: false`, and `store: "postgres"`. A one-line payroll run was created, authorized, and executed on that deployment. The pay-to address is still the unfunded structural fixture, so a real wallet payment to the 402 challenge would not reach a wallet anyone controls.
 
 ## Vercel
 
