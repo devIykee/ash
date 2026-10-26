@@ -41,6 +41,7 @@
     "packages/sdk/src/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "src/**/*.d.ts",
     "tests/**/*.ts",
     "vitest.config.ts",
     ".next/types/**/*.ts"

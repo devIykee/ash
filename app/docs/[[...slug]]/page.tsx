@@ -1,8 +1,7 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
+import { manuals } from "@/content/manuals";
 
 const PAGES = [
   ["README", "README"],
@@ -22,15 +21,8 @@ const PAGES = [
 
 export default async function DocsPage({ params }: { params: Promise<{ slug?: string[] }> }) {
   const slug = (await params).slug?.[0] ?? "ARCHITECTURE";
-  const known = PAGES.some(([id]) => id === slug);
-  if (!known) notFound();
-  const file = slug === "README" ? "README.md" : slug === "SUBMISSION" ? "SUBMISSION.md" : path.join("docs", `${slug}.md`);
-  let source = "";
-  try {
-    source = await readFile(path.join(process.cwd(), file), "utf8");
-  } catch {
-    notFound();
-  }
+  const source = manuals[slug];
+  if (!source) notFound();
   return (
     <div className="stack docs">
       <p className="kicker">Documentation</p>

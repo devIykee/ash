@@ -24,8 +24,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ["@noble/ciphers", "@noble/curves", "@noble/hashes"],
-  outputFileTracingIncludes: {
-    "/docs/[[...slug]]": ["./docs/**/*.md", "./README.md", "./SUBMISSION.md"],
+  webpack: (config) => {
+    config.module.rules.push({ test: /\.md$/, type: "asset/source" });
+    return config;
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
