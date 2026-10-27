@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BuyButton } from "@/components/buy-button";
+import { SavedFileKey } from "@/components/saved-file-key";
 import { PageHeader } from "@/components/page-header";
 import { zatoshiToZec } from "@/domain/money";
 import { AshError } from "@/domain/errors";
@@ -33,7 +34,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
             {item}
           </p>
         ))}
-        {"pack" in offer ? <p className="banner ok">You published this file. The file key should still be in this browser.</p> : null}
+        {"pack" in offer ? <SavedFileKey offerId={id} /> : null}
         <BuyButton offerId={id} disabled={!actor} title={offer.title} price={price} />
         {!actor ? <p className="muted">Sign in as Jules Okonkwo before starting a purchase. Starting a purchase does not pay.</p> : null}
         <Link href="/commerce">Back to offers</Link>

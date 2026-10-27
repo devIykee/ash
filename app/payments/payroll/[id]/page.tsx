@@ -31,7 +31,7 @@ export default async function PayrollPage({ params }: { params: Promise<{ id: st
             ? "A math check matches the committed total. It does not prove that anyone was paid."
             : "There is no math check for the total yet. That does not, by itself, mean a payment failed."}
         </p>
-        <PayrollDesk id={id} version={version} canOperate={actor.user.role === "operator"} lines={lines} practice={config().allowSimulated} />
+        <PayrollDesk id={id} version={version} state={report.state} canOperate={actor.user.role === "operator"} lines={lines} practice={config().allowSimulated} />
         <Link href={`/operations/${id}`}>Open the activity record</Link>
       </div>
     );

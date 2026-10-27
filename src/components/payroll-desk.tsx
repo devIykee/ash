@@ -23,12 +23,14 @@ type Line = {
 export function PayrollDesk({
   id,
   version,
+  state,
   canOperate,
   lines,
   practice,
 }: {
   id: string;
   version: number;
+  state: string;
   canOperate: boolean;
   lines: Line[] | null;
   practice: boolean;
@@ -54,6 +56,10 @@ export function PayrollDesk({
 
   if (!lines) return <p className="muted">Recipient names and addresses are hidden in the reviewer view. You can see the total and the status.</p>;
   const total = lines.reduce((sum, line) => sum + BigInt(line.amountZatoshi), 0n);
+  const invalid = lines.some((line) => line.state === "invalid");
+  const canApprove = canOperate && state === "validated" && !invalid;
+  const canSend = canOperate && ["authorized", "partially_completed", "failed"].includes(state);
+  const canCancel = canOperate && ["draft", "validated", "authorized"].includes(state);
   return (
     <div className="stack">
       <div className="table-wrap">
@@ -94,16 +100,24 @@ export function PayrollDesk({
       </div>
       {canOperate ? (
         <div className="stack" data-guide="payroll-actions">
+          {invalid ? <p className="banner">Correct the highlighted lines before this run can be approved. Nothing has been sent.</p> : null}
+          {state === "completed" ? <p className="banner ok">This run is finished. The practice payments were not sent on the network.</p> : null}
           <div className="row">
-            <button type="button" onClick={() => post(`/api/ash/payroll/${id}/authorize`)} disabled={pending}>
-              Approve run
-            </button>
-            <button type="button" onClick={() => setConfirm("send")} disabled={pending}>
-              {practice ? "Record practice payments" : "Record payments"}
-            </button>
-            <button className="quiet" type="button" onClick={() => setConfirm("cancel")} disabled={pending}>
-              Cancel run
-            </button>
+            {canApprove ? (
+              <button type="button" onClick={() => post(`/api/ash/payroll/${id}/authorize`)} disabled={pending}>
+                Approve run
+              </button>
+            ) : null}
+            {canSend ? (
+              <button type="button" onClick={() => setConfirm("send")} disabled={pending}>
+                {practice ? "Record practice payments" : "Record payments"}
+              </button>
+            ) : null}
+            {canCancel ? (
+              <button className="quiet" type="button" onClick={() => setConfirm("cancel")} disabled={pending}>
+                Cancel run
+              </button>
+            ) : null}
           </div>
           <HelpNote label="What these actions do">
             Approve run does not move money. Recording payments uses the current payment mode. Cancelling stops a run that has not recorded a payment. A line that already succeeded is not paid again when you retry a failed one.
