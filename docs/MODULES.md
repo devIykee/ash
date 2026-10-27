@@ -73,4 +73,4 @@ A participant seals the operation state, payment status and mode, transaction re
 
 ## Shared UI
 
-Overview, Commerce, Payments, Privacy tools, Operations, Agents, and Documentation are separate routes. Each operation also has `/operations/:id` with state, payment, access, disclosures, events, and evidence export.
+The public page is `/`. The workspace is `/workspace`. Payments, exchange, privacy tools, activity, agents, help, and documentation are separate routes. Each operation also has `/operations/:id` with state, payment, access, disclosures, events, and evidence export. Machine-readable states stay in the API. The interface translates them.

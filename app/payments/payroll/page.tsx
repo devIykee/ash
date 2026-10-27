@@ -1,32 +1,58 @@
 import Link from "next/link";
+import { EmptyState } from "@/components/empty-state";
+import { GuideStart } from "@/components/guide-provider";
+import { PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
 import { listPayroll } from "@/services/payroll";
 import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
+
+export const metadata = { title: "Contractor payments" };
 
 export default async function PayrollListPage() {
   const actor = await requireActor();
   const runs = await getStore().transaction((tx) => listPayroll(tx, actor));
   return (
     <div className="stack">
-      <p className="kicker">Payroll</p>
-      <div className="row">
-        <h1>Contractor runs</h1>
-        {actor.user.role === "operator" ? (
-          <Link className="button" href="/payments/payroll/new">
-            New run
-          </Link>
-        ) : null}
+      <PageHeader
+        eyebrow="Payments"
+        title="Contractor payments"
+        lede="A run is a list of people and amounts. Checking it does not send money. You approve it, then record the payments."
+        actions={
+          actor.user.role === "operator" ? (
+            <Link className="button" href="/payments/payroll/new">
+              New payment run
+            </Link>
+          ) : (
+            <GuideStart id="payroll">How payment runs work</GuideStart>
+          )
+        }
+      />
+      {actor.user.role === "auditor" ? <p className="banner">You can see the total and the status. Names and addresses stay on the payer’s view.</p> : null}
+      <div data-guide="payroll-list" className="stack">
+        {runs.length === 0 ? (
+          <EmptyState
+            title="No payment runs yet"
+            body="Create a run when you know who to pay. Nothing is sent until you approve the run and then record the payments."
+            action={
+              actor.user.role === "operator" ? (
+                <Link className="button" href="/payments/payroll/new">
+                  Create the first run
+                </Link>
+              ) : (
+                <p className="muted">Sign in as Avery Chen to create one.</p>
+              )
+            }
+          />
+        ) : (
+          runs.map((run) => (
+            <Link className="card" key={run.id} href={`/payments/payroll/${run.id}`}>
+              <h3>{run.label}</h3>
+              <StatusPill value={run.state} />
+            </Link>
+          ))
+        )}
       </div>
-      {actor.user.role === "auditor" ? <p className="banner">You see aggregate status. Recipient lines stay on the operator view.</p> : null}
-      {runs.length === 0 ? <p className="muted">No runs yet.</p> : null}
-      {runs.map((run) => (
-        <Link className="card" key={run.id} href={`/payments/payroll/${run.id}`}>
-          <h3>{run.label}</h3>
-          <span className="pill" data-state={run.state}>
-            {run.state.replaceAll("_", " ")}
-          </span>
-        </Link>
-      ))}
     </div>
   );
 }

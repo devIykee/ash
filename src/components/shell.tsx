@@ -1,16 +1,33 @@
+"use client";
+
 import type { ReactNode } from "react";
-import { Nav } from "./nav";
+import { usePathname } from "next/navigation";
+import { GuideProvider } from "./guide-provider";
+import { AppHeader } from "./nav";
 
 export function Shell({ user, children }: { user: { id: string; name: string; role: string } | null; children: ReactNode }) {
-  return (
-    <div className="app">
-      <a className="skip" href="#content">
-        Skip to content
-      </a>
-      <Nav user={user} />
-      <main className="main" id="content">
+  const pathname = usePathname();
+  if (pathname === "/") {
+    return (
+      <>
+        <a className="skip" href="#content">
+          Skip to content
+        </a>
         {children}
-      </main>
-    </div>
+      </>
+    );
+  }
+  return (
+    <GuideProvider>
+      <div className="app-frame">
+        <a className="skip" href="#content">
+          Skip to content
+        </a>
+        <AppHeader user={user} />
+        <main className={pathname.startsWith("/docs") ? "main wide" : "main"} id="content">
+          {children}
+        </main>
+      </div>
+    </GuideProvider>
   );
 }

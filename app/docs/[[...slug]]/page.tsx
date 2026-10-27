@@ -26,7 +26,8 @@ export default async function DocsPage({ params }: { params: Promise<{ slug?: st
   return (
     <div className="stack docs">
       <p className="kicker">Documentation</p>
-      <nav className="row" aria-label="Documents">
+      <p className="lede">These pages keep the engineering names on purpose: schemas, payment rules, and cryptographic limits. The workspace uses plainer words for the same behavior.</p>
+      <nav className="doc-nav" aria-label="Documents">
         {PAGES.map(([id, label]) => (
           <Link key={id} href={id === "ARCHITECTURE" ? "/docs" : `/docs/${id}`}>
             {label}

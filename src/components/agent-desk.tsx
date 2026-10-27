@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api } from "@/client/api";
+import { zatoshiToZec } from "@/domain/money";
 import { encodePaymentSignature, parsePaymentRequired } from "@sdk";
+import { ConfirmDialog } from "./confirm-dialog";
+import { presentError } from "./labels";
 
 export function AgentForm() {
   const router = useRouter();
@@ -11,36 +14,57 @@ export function AgentForm() {
   const [budget, setBudget] = useState("0.01");
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [pending, setPending] = useState(false);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setError("");
+    setPending(true);
     try {
       const created = await api<{ token: string }>("/api/ash/agents", {
         body: { name, budgetZec: budget, scopes: ["read", "pay", "exchange"] },
       });
       setToken(created.token);
+      setConfirm(false);
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the token.");
+      setError(presentError(caught, "We couldn't create the token. No secret was issued."));
+    } finally {
+      setPending(false);
     }
   }
 
   return (
-    <form className="stack" onSubmit={submit}>
+    <form
+      className="stack"
+      data-guide="agent-form"
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        setConfirm(true);
+      }}
+    >
       <label>
         Name
         <input value={name} onChange={(event) => setName(event.target.value)} required />
       </label>
       <label>
-        Budget ZEC
-        <input value={budget} onChange={(event) => setBudget(event.target.value)} required />
+        Spending limit in ZEC
+        <input value={budget} onChange={(event) => setBudget(event.target.value)} required inputMode="decimal" />
       </label>
-      <button type="submit">Create token</button>
-      <p className="muted">The secret is shown once. An agent cannot authorize a payroll run or exceed this budget.</p>
+      <button type="submit">Review token</button>
+      <p className="muted">The secret is shown once. This token can read, pay, and exchange, up to the limit. It cannot approve a contractor payment run.</p>
+      <ConfirmDialog
+        open={confirm}
+        title="Create this agent token?"
+        body={`${name} will have a ${budget} ZEC limit and the read, pay, and exchange scopes. The secret appears once on this page. ASH stores only a hash. Revoking the token later does not undo payments it already made.`}
+        confirmLabel="Create token"
+        pending={pending}
+        onClose={() => setConfirm(false)}
+        onConfirm={submit}
+      />
       {token ? (
         <label>
-          Token
+          Token, shown once
           <textarea readOnly value={token} />
         </label>
       ) : null}
@@ -51,58 +75,117 @@ export function AgentForm() {
 
 export function RevokeAgent({ id }: { id: string }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
   return (
-    <button
-      className="quiet"
-      type="button"
-      onClick={async () => {
-        await api(`/api/ash/agents/${id}`, { method: "DELETE" });
-        router.refresh();
-      }}
-    >
-      Revoke
-    </button>
+    <>
+      <button className="quiet" type="button" onClick={() => setOpen(true)}>
+        Revoke token
+      </button>
+      {error ? <p className="alert">{error}</p> : null}
+      <ConfirmDialog
+        open={open}
+        title="Revoke this token?"
+        body="The token stops working immediately and cannot be restored. Payments it already made stay recorded."
+        confirmLabel="Revoke token"
+        pending={pending}
+        onClose={() => setOpen(false)}
+        onConfirm={async () => {
+          setPending(true);
+          setError("");
+          try {
+            await api(`/api/ash/agents/${id}`, { method: "DELETE" });
+            setOpen(false);
+            router.refresh();
+          } catch (caught) {
+            setError(presentError(caught, "We couldn't revoke the token. It may still be active."));
+          } finally {
+            setPending(false);
+          }
+        }}
+      />
+    </>
   );
 }
 
-export function PaidApiDemo() {
+export function PaidApiDemo({ practice }: { practice: boolean }) {
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const [offer, setOffer] = useState<{ challengeId: string; network: string; amount: string; payTo: string } | null>(null);
 
-  async function run() {
+  async function requestNote() {
     setError("");
     setOutput("");
+    setPending(true);
     try {
       const first = await fetch("/api/v1/paid/research");
-      if (first.status !== 402) throw new Error(`Expected 402, received ${first.status}.`);
+      if (first.status !== 402) throw new Error(`The service did not ask for payment. It returned ${first.status}.`);
       const challenge = parsePaymentRequired(first.headers.get("payment-required"));
-      const challengeId = challenge.accepts[0].extra.challengeId;
-      const paid = await api<{ paymentRef: string }>(`/api/ash/challenges/${challengeId}/pay`, { method: "POST", body: {} });
+      const accept = challenge.accepts[0];
+      setOffer({
+        challengeId: accept.extra.challengeId,
+        network: accept.network,
+        amount: accept.amount,
+        payTo: accept.payTo,
+      });
+    } catch (caught) {
+      setError(presentError(caught, "We couldn't request the note. No payment was recorded."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function pay() {
+    if (!offer) return;
+    setPending(true);
+    setError("");
+    try {
+      const paid = await api<{ paymentRef: string }>(`/api/ash/challenges/${offer.challengeId}/pay`, { method: "POST", body: {} });
       const second = await fetch("/api/v1/paid/research", {
         headers: {
           "payment-signature": encodePaymentSignature({
-            challengeId,
+            challengeId: offer.challengeId,
             paymentRef: paid.paymentRef,
-            network: challenge.accepts[0].network,
+            network: offer.network,
           }),
         },
       });
       const body = await second.json();
       if (!second.ok) throw new Error(body.error?.message || "The paid request failed.");
+      setOffer(null);
       setOutput(JSON.stringify(body, null, 2));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The demo failed.");
+      setError(presentError(caught, "The paid request did not finish. The note was not returned."));
+    } finally {
+      setPending(false);
     }
   }
 
   return (
-    <div className="stack">
-      <button type="button" onClick={run}>
-        Run one paid request
+    <div className="stack" data-guide="api-demo">
+      <button type="button" onClick={requestNote} disabled={pending}>
+        Request the note
       </button>
-      <p className="muted">The first response is a challenge. The note is returned only after this session pays it. A second use of the same reference is rejected.</p>
+      <p className="muted">The first response asks for payment and does not include the note. You confirm the amount before ASH records the payment. The same payment reference works once.</p>
       {output ? <pre>{output}</pre> : null}
       {error ? <p className="alert">{error}</p> : null}
+      <ConfirmDialog
+        open={Boolean(offer)}
+        title="Pay for this request?"
+        body={
+          practice
+            ? `The note costs ${offer ? zatoshiToZec(BigInt(offer.amount)) : ""} ZEC. This records a practice payment for this request only. It is not broadcast, and the reference works once.`
+            : "ASH will try the payment check for this request. A practice payment is refused in network-check mode."
+        }
+        confirmLabel={practice ? "Record practice payment" : "Continue"}
+        pending={pending}
+        onClose={() => setOffer(null)}
+        onConfirm={pay}
+      >
+        {offer ? <p className="mono">{offer.payTo}</p> : null}
+      </ConfirmDialog>
     </div>
   );
 }

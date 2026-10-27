@@ -4,11 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { generateX25519, publicFromPrivate } from "@/crypto/box";
 import { api, freshKey } from "@/client/api";
+import { ConfirmDialog } from "./confirm-dialog";
+import { presentError } from "./labels";
 
-export function BuyButton({ offerId, disabled }: { offerId: string; disabled: boolean }) {
+export function BuyButton({ offerId, disabled, title, price }: { offerId: string; disabled: boolean; title: string; price: string }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [confirm, setConfirm] = useState(false);
 
   async function buy() {
     setPending(true);
@@ -25,22 +28,32 @@ export function BuyButton({ offerId, disabled }: { offerId: string; disabled: bo
         body: { offerId },
         idempotencyKey: freshKey("buy"),
       });
+      setConfirm(false);
       router.push(`/commerce/exchanges/${opened.operation.id}`);
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open the exchange.");
+      setError(presentError(caught, "We couldn't open the exchange. No payment was recorded."));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="stack">
-      <button type="button" onClick={buy} disabled={disabled || pending}>
+    <div className="stack" data-guide="offer-buy">
+      <button type="button" onClick={() => setConfirm(true)} disabled={disabled || pending}>
         {pending ? "Opening" : "Start purchase"}
       </button>
-      <p className="muted">This registers an X25519 key from this browser. It does not pay yet.</p>
+      <p className="muted">This creates an encryption key in this browser. It does not pay.</p>
       {error ? <p className="alert">{error}</p> : null}
+      <ConfirmDialog
+        open={confirm}
+        title="Start this purchase?"
+        body={`You are opening an exchange for ${title} at ${price} ZEC. ASH will store an encryption address from this browser. Payment happens later, after the sender allows delivery.`}
+        confirmLabel="Open the exchange"
+        pending={pending}
+        onClose={() => setConfirm(false)}
+        onConfirm={buy}
+      />
     </div>
   );
 }

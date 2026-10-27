@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { encryptPack } from "@/crypto/pack";
 import { api, freshKey } from "@/client/api";
+import { presentError } from "./labels";
 
 export function OfferForm() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export function OfferForm() {
   const [error, setError] = useState("");
   const [backup, setBackup] = useState("");
   const [pending, setPending] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -39,40 +41,68 @@ export function OfferForm() {
       router.push(`/commerce/offers/${created.offer.id}`);
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not publish.");
+      setError(presentError(caught, "We couldn't publish the file. The original text was not uploaded."));
     } finally {
       setPending(false);
     }
   }
 
+  if (reviewing) {
+    return (
+      <form className="stack" onSubmit={submit}>
+        <h2>Review before encrypting</h2>
+        <p>
+          <strong>{title}</strong> · {price} ZEC
+        </p>
+        <p>{description}</p>
+        <p>The text is encrypted in this browser. The original is not uploaded. A file key is saved in this browser and shown once. Download or copy it if you need it later. Publishing does not collect a payment.</p>
+        <div className="row">
+          <button type="submit" disabled={pending}>
+            {pending ? "Encrypting" : "Encrypt and publish"}
+          </button>
+          <button className="quiet" type="button" onClick={() => setReviewing(false)} disabled={pending}>
+            Back
+          </button>
+        </div>
+        {backup ? (
+          <label>
+            File key, shown once
+            <textarea readOnly value={backup} />
+          </label>
+        ) : null}
+        {error ? <p className="alert">{error}</p> : null}
+      </form>
+    );
+  }
+
   return (
-    <form className="stack" onSubmit={submit}>
+    <form
+      className="stack"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setReviewing(true);
+      }}
+    >
       <label>
         Title
         <input value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={80} />
       </label>
       <label>
-        Description
+        What the buyer receives
         <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={600} />
       </label>
-      <label>
+      <label data-guide="offer-price">
         Price in ZEC
-        <input value={price} onChange={(event) => setPrice(event.target.value)} required />
+        <input value={price} onChange={(event) => setPrice(event.target.value)} required inputMode="decimal" />
       </label>
-      <label>
-        File text, encrypted in this browser before upload
+      <label data-guide="offer-file">
+        File text
         <textarea value={text} onChange={(event) => setText(event.target.value)} required />
+        <span className="field-hint">This stays on this device until you encrypt it. Browser storage is not a backup.</span>
       </label>
-      <p className="muted">Plaintext is not uploaded. Browser storage is not a filesystem backup. Download the key if you need it later.</p>
-      <button type="submit" disabled={pending}>
-        {pending ? "Encrypting" : "Publish encrypted offer"}
+      <button type="submit" data-guide="offer-publish">
+        Review and encrypt
       </button>
-      {backup ? (
-        <label>
-          Content key, shown once
-          <textarea readOnly value={backup} />
-        </label>
-      ) : null}
       {error ? <p className="alert">{error}</p> : null}
     </form>
   );

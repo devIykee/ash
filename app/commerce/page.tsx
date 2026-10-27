@@ -1,9 +1,15 @@
 import Link from "next/link";
+import { EmptyState } from "@/components/empty-state";
+import { GuideStart } from "@/components/guide-provider";
+import { ConsequenceList, PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
 import { zatoshiToZec } from "@/domain/money";
 import { listOffers } from "@/services/exchange";
 import { listOperations } from "@/services/overview";
 import { currentActor } from "@/server/current";
 import { getStore } from "@/server/store";
+
+export const metadata = { title: "Exchange" };
 
 export default async function CommercePage() {
   const actor = await currentActor();
@@ -11,41 +17,69 @@ export default async function CommercePage() {
   const exchanges = actor
     ? (await getStore().transaction((tx) => listOperations(tx, actor))).filter((item) => item.type === "data_exchange")
     : [];
+  const canPublish = actor?.user.role === "creator" || actor?.user.role === "operator";
   return (
     <div className="stack">
-      <p className="kicker">Commerce</p>
-      <h1>Encrypted exchange</h1>
-      <p className="lede">Sellers encrypt before upload. Buyers decrypt after ASH accepts a payment. This is a labeled Shamir delivery prototype, not an atomic swap.</p>
-      <div className="row">
-        <Link className="button" href="/commerce/new">
-          Publish an offer
-        </Link>
-        <Link className="button quiet" href="/agents">
-          Paid API
-        </Link>
-      </div>
-      <div className="grid-2">
-        {offers.length === 0 ? <p className="muted">No open offers.</p> : null}
-        {offers.map((offer) => (
-          <Link className="card" key={offer.id} href={`/commerce/offers/${offer.id}`}>
-            <p className="kicker">{offer.sellerName}</p>
-            <h3>{offer.title}</h3>
-            <p>{offer.description}</p>
-            <p className="mono">{zatoshiToZec(BigInt(offer.priceZatoshi))} ZEC</p>
-          </Link>
-        ))}
+      <PageHeader
+        eyebrow="Exchange"
+        title="Buy or sell a private file"
+        lede="The file is encrypted in the sender’s browser before upload. The recipient opens it on their own device. This is not an escrow service, and a failed delivery does not refund the payment by itself."
+        actions={
+          <div className="row">
+            {canPublish ? (
+              <Link className="button" href="/commerce/new">
+                Publish a file
+              </Link>
+            ) : null}
+            <GuideStart id="exchange">Guide an exchange</GuideStart>
+          </div>
+        }
+      />
+      <ConsequenceList
+        items={[
+          { title: "Before you pay", body: "Read the price, the description, and the file fingerprint." },
+          { title: "What ASH stores", body: "The encrypted file and one part of the key. ASH cannot read the file." },
+          { title: "If opening fails", body: "Report the failure, then try the stored key part. The payment is not reversed." },
+        ]}
+      />
+      <div className="grid-2" data-guide="offer-list">
+        {offers.length === 0 ? (
+          <EmptyState
+            title="No files are offered yet"
+            body={canPublish ? "Publish a file when you want to sell one. The original text stays in your browser until you encrypt it." : "A seller has not published a file. Sign in as Noor Hale to publish one, or check back for an offer."}
+            action={
+              canPublish ? (
+                <Link className="button" href="/commerce/new">
+                  Publish a file
+                </Link>
+              ) : null
+            }
+          />
+        ) : (
+          offers.map((offer) => (
+            <Link className="card" key={offer.id} href={`/commerce/offers/${offer.id}`}>
+              <p className="kicker">{offer.sellerName}</p>
+              <h3>{offer.title}</h3>
+              <p>{offer.description}</p>
+              <p>{zatoshiToZec(BigInt(offer.priceZatoshi))} ZEC</p>
+            </Link>
+          ))
+        )}
       </div>
       <section className="stack">
         <h2>Your exchanges</h2>
-        {exchanges.length === 0 ? <p className="muted">None yet.</p> : null}
-        {exchanges.map((item) => (
-          <Link className="card" key={item.id} href={`/commerce/exchanges/${item.id}`}>
-            <h3>{item.label}</h3>
-            <span className="pill" data-state={item.state}>
-              {item.state.replaceAll("_", " ")}
-            </span>
-          </Link>
-        ))}
+        <div data-guide="exchange-list" className="stack">
+          {exchanges.length === 0 ? (
+            <EmptyState title="No exchanges yet" body="Start a purchase from an offer, or publish a file and wait for a buyer. Payment happens only after the sender allows delivery." />
+          ) : (
+            exchanges.map((item) => (
+              <Link className="card" key={item.id} href={`/commerce/exchanges/${item.id}`}>
+                <h3>{item.label}</h3>
+                <StatusPill value={item.state} />
+              </Link>
+            ))
+          )}
+        </div>
       </section>
     </div>
   );

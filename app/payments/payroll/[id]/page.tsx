@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PayrollDesk } from "@/components/payroll-desk";
+import { PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
 import { AshError } from "@/domain/errors";
 import { zatoshiToZec } from "@/domain/money";
 import { getPayroll } from "@/services/payroll";
+import { config } from "@/server/config";
 import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
+
+export const metadata = { title: "Payment run" };
 
 export default async function PayrollPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,17 +21,18 @@ export default async function PayrollPage({ params }: { params: Promise<{ id: st
     const version = "version" in report ? report.version : 0;
     return (
       <div className="stack">
-        <p className="kicker">Payroll</p>
-        <h1>{report.label}</h1>
-        <span className="pill" data-state={report.state}>
-          {report.state.replaceAll("_", " ")}
-        </span>
-        <p className="mono">
-          {zatoshiToZec(BigInt(report.totalAmountZatoshi))} ZEC plus {zatoshiToZec(BigInt(report.totalFeeZatoshi))} ZEC estimated fees
+        <PageHeader eyebrow="Payments" title={report.label} lede="Approve the run before you record payments. A failed line can be retried without paying the others again." />
+        <StatusPill value={report.state} />
+        <p>
+          {zatoshiToZec(BigInt(report.totalAmountZatoshi))} ZEC, plus {zatoshiToZec(BigInt(report.totalFeeZatoshi))} ZEC in estimated fees.
         </p>
-        <p className="muted">Sum proof {report.proofValid ? "checks" : "is absent"}. It proves a committed total, not that anyone was paid.</p>
-        <PayrollDesk id={id} version={version} canOperate={actor.user.role === "operator"} lines={lines} />
-        <Link href={`/operations/${id}`}>Operation record</Link>
+        <p className="muted">
+          {report.proofValid
+            ? "A math check matches the committed total. It does not prove that anyone was paid."
+            : "There is no math check for the total yet. That does not, by itself, mean a payment failed."}
+        </p>
+        <PayrollDesk id={id} version={version} canOperate={actor.user.role === "operator"} lines={lines} practice={config().allowSimulated} />
+        <Link href={`/operations/${id}`}>Open the activity record</Link>
       </div>
     );
   } catch (error) {

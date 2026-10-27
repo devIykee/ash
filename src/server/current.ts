@@ -20,6 +20,6 @@ export async function currentActor(): Promise<Actor | null> {
 
 export async function requireActor(): Promise<Actor> {
   const actor = await currentActor();
-  if (!actor) redirect("/");
+  if (!actor) redirect("/workspace");
   return actor;
 }

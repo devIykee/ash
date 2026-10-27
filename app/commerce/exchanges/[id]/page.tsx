@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExchangeDesk } from "@/components/exchange-desk";
+import { GuideStart } from "@/components/guide-provider";
+import { PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
 import { AshError } from "@/domain/errors";
 import { DISCLOSURES } from "@/domain/types";
+import { paymentModeLabel, stateLabel } from "@/components/labels";
 import { getExchange } from "@/services/exchange";
 import { operationDetail } from "@/services/overview";
+import { config } from "@/server/config";
 import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
+
+export const metadata = { title: "Exchange" };
 
 export default async function ExchangePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,20 +26,23 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
     });
     if (!detail || detail === "forbidden") notFound();
     const role = actor.user.id === exchange.exchange.sellerId ? "seller" : actor.user.id === exchange.exchange.buyerId ? "buyer" : "other";
+    const payment = detail.operation.payment;
     return (
       <div className="stack">
-        <p className="kicker">Data exchange</p>
-        <h1>{detail.operation.label}</h1>
-        <span className="pill" data-state={detail.operation.state}>
-          {detail.operation.state.replaceAll("_", " ")}
-        </span>
+        <PageHeader
+          eyebrow="File exchange"
+          title={detail.operation.label}
+          lede="The sender allows delivery, then the buyer pays. Opening the file happens in this browser."
+          actions={<GuideStart id="delivery">If delivery fails</GuideStart>}
+        />
+        <StatusPill value={detail.operation.state} />
         <p className="banner">{DISCLOSURES.escrow}</p>
-        {detail.operation.payment ? (
-          <p className="mono">
-            Payment {detail.operation.payment.status} · {detail.operation.payment.mode}
+        {payment ? (
+          <p>
+            Payment: {stateLabel(payment.status)}. {paymentModeLabel(payment.mode)}
           </p>
         ) : (
-          <p className="muted">No payment recorded.</p>
+          <p className="muted">No payment has been recorded.</p>
         )}
         <ExchangeDesk
           id={id}
@@ -43,8 +53,9 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           priceZatoshi={exchange.exchange.priceZatoshi}
           buyerPublicKey={exchange.exchange.buyerPublicKey}
           releaseReady={exchange.exchange.releaseReady}
+          practice={config().allowSimulated}
         />
-        <Link href={`/operations/${id}`}>Operation record</Link>
+        <Link href={`/operations/${id}`}>Open the activity record</Link>
       </div>
     );
   } catch (error) {

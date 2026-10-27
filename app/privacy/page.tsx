@@ -1,22 +1,28 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+
+export const metadata = { title: "Privacy" };
 
 export default function PrivacyPage() {
   return (
     <div className="stack">
-      <p className="kicker">Privacy tools</p>
-      <h1>Limit what you reveal</h1>
-      <div className="grid-2">
-        <Link className="card" href="/privacy/memo">
-          <h3>Memo linter</h3>
-          <p className="muted">Local pattern checks before a memo reaches a recipient. It does not submit a transaction.</p>
+      <PageHeader
+        eyebrow="Privacy"
+        title="Share less than the whole account."
+        lede="Check a memo before it leaves this browser, or give a reviewer a record with a stated limit."
+      />
+      <div className="task-list">
+        <Link className="task-link" href="/privacy/memo">
+          <strong>Check a memo</strong>
+          <span className="muted">Look for emails, phone numbers, and invoice references. The memo is not uploaded with the check.</span>
         </Link>
-        <Link className="card" href="/privacy/grants">
-          <h3>Audit grants</h3>
-          <p className="muted">Application records for viewing access. Expiry here does not revoke a key the auditor already holds.</p>
+        <Link className="task-link" href="/privacy/grants">
+          <strong>Limited audit access</strong>
+          <span className="muted">Share a written summary, or record that a viewing key would reveal the whole account.</span>
         </Link>
-        <Link className="card" href="/docs/PRIVACY">
-          <h3>Privacy notes</h3>
-          <p className="muted">Who can see metadata, receipts, and chain data.</p>
+        <Link className="task-link" href="/docs/PRIVACY">
+          <strong>Privacy notes</strong>
+          <span className="muted">The engineering explanation of metadata, receipts, and what the network hides.</span>
         </Link>
       </div>
     </div>

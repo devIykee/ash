@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
+import { receiptFieldLabel, verificationLabel } from "@/components/labels";
+import { PageHeader } from "@/components/page-header";
 import { AshError } from "@/domain/errors";
 import { zatoshiToZec } from "@/domain/money";
 import { checkReceipt, getReceipt } from "@/services/tips";
 import { getStore } from "@/server/store";
+
+export const metadata = { title: "Receipt" };
 
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,21 +16,24 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
     const { publicKey, signature, ...body } = receipt;
     return (
       <div className="stack">
-        <p className="kicker">Receipt</p>
-        <h1>{zatoshiToZec(BigInt(receipt.amountZatoshi))} ZEC</h1>
-        <p className="banner">{verdict.valid ? verdict.reason : "This receipt failed verification."}</p>
-        <p className="mono">Level {receipt.verificationLevel}</p>
-        <dl className="panel">
+        <PageHeader
+          eyebrow="Receipt"
+          title={`${zatoshiToZec(BigInt(receipt.amountZatoshi))} ZEC`}
+          lede="This receipt lists the fields that were approved. One ZEC is 100,000,000 zatoshis."
+        />
+        <p className="banner">{verdict.valid ? verdict.reason : "This receipt failed its signature check."}</p>
+        <p>{verificationLabel(receipt.verificationLevel)}</p>
+        <dl className="panel receipt">
           {Object.entries(body).map(([field, value]) => (
             <div key={field}>
-              <dt className="kicker">{field}</dt>
-              <dd>{value === null ? "omitted" : String(value)}</dd>
+              <dt className="kicker">{receiptFieldLabel(field)}</dt>
+              <dd>{value === null ? "Left off this receipt" : Array.isArray(value) ? value.join(", ") : String(value)}</dd>
             </div>
           ))}
         </dl>
-        <p className="muted">Signature key {publicKey}</p>
+        <p className="muted">The signature key is public. A viewing key is not part of this receipt. A third party can check the signature, and still has to trust ASH for what the check level claims.</p>
+        <p className="mono">{publicKey}</p>
         <p className="mono">{signature}</p>
-        <p className="muted">A viewing key is not part of this format. A third party can check the signature against the public key. They still rely on ASH for what the verification level claims.</p>
       </div>
     );
   } catch (error) {

@@ -32,18 +32,20 @@ export function MemoStudio() {
       });
       setNote("ASH stored the counts only. The memo stayed in this browser.");
     } catch (caught) {
-      setNote(caught instanceof Error ? caught.message : "Could not record counts.");
+      setNote(caught instanceof Error ? caught.message : "We couldn't save the counts. The memo stayed in this browser.");
     }
   }
 
   return (
     <div className="stack">
       <p className="banner">{result.disclaimer}</p>
-      <label>
+      <label data-guide="memo-input">
         Memo
         <textarea value={memo} onChange={(event) => setMemo(event.target.value)} />
+        <span className="field-hint">This text stays in the browser unless you later choose to put it on a receipt.</span>
       </label>
-      {result.findings.length === 0 ? <p className="muted">No pattern matched. That is not a privacy proof.</p> : null}
+      <div data-guide="memo-findings">
+      {result.findings.length === 0 ? <p className="muted">No pattern matched. That is not proof the memo is safe.</p> : null}
       {result.findings.map((finding) => (
         <article className="finding" data-severity={finding.severity} key={finding.id}>
           <h3>
@@ -58,20 +60,21 @@ export function MemoStudio() {
           </label>
         </article>
       ))}
-      <div className="row">
+      </div>
+      <div className="row" data-guide="memo-actions">
         <button type="button" onClick={preview}>
-          Preview cleaned memo
+          Preview a cleaner memo
         </button>
         <button className="quiet" type="button" onClick={record}>
-          Record counts only
+          Save the counts only
         </button>
       </div>
       {proposal ? (
         <div className="stack">
-          <h2>Proposal</h2>
+          <h2>Suggested memo</h2>
           <pre>{proposal}</pre>
           <button type="button" onClick={() => setMemo(proposal)}>
-            Use cleaned memo
+            Use this memo in the box
           </button>
         </div>
       ) : null}
