@@ -543,3 +543,42 @@ button.task-link:hover { transform: none; background: transparent; }
   }
   button:hover, .button:hover, .card:hover { transform: none; }
 }
+
+/* Beat the browser link color. A filled control stays light on dark. */
+a.button:not(.quiet):any-link,
+a.button:not(.quiet):visited,
+a.button:not(.quiet):hover,
+a.button:not(.quiet):active,
+button:not(.quiet):not(.task-link):not(.icon-x),
+button:not(.quiet):not(.task-link):not(.icon-x):hover,
+button.danger,
+button.danger:hover,
+button.danger:active {
+  color: #f7f4ee;
+}
+a.button.danger,
+a.button.danger:any-link,
+a.button.danger:visited,
+a.button.danger:hover,
+a.button.danger:active {
+  color: #f7f4ee;
+  background: var(--danger);
+}
+.help-note > button:not(.quiet):not(.task-link):not(.icon-x),
+.help-note > button:not(.quiet):not(.task-link):not(.icon-x):hover {
+  background: transparent;
+  color: var(--ink-soft);
+}
+.help-note > button:not(.quiet):not(.task-link):not(.icon-x):hover { color: var(--ink); }
+button.task-link,
+button.task-link:hover,
+a.button.quiet,
+a.button.quiet:any-link,
+a.button.quiet:visited,
+a.button.quiet:hover,
+button.quiet,
+.button.quiet,
+.persona-button,
+.icon-x {
+  color: var(--ink);
+}
