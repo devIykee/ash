@@ -47,7 +47,7 @@ Details are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Next.js 15 App Router, React 19, TypeScript
 - Zod for request schemas
 - `@noble/ciphers`, `@noble/curves`, and `@noble/hashes`
-- Self-hosted Newsreader, Outfit, and IBM Plex Mono
+- Self-hosted Outfit for the interface, and IBM Plex Mono for references
 - `postgres` when a database URL is configured
 - Vitest
 

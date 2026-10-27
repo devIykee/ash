@@ -3,8 +3,8 @@ import { LandingPage } from "@/components/landing-page";
 import { currentActor } from "@/server/current";
 
 export const metadata: Metadata = {
-  title: "Private payments. Clear outcomes.",
-  description: "ASH helps people and AI agents pay, exchange digital resources, and verify what happened without exposing more information than necessary.",
+  title: "Pay someone privately",
+  description: "Pay someone, send a locked file, or show one payment to a reviewer. They only see that.",
 };
 
 export default async function HomePage() {

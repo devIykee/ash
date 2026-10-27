@@ -18,9 +18,9 @@ export default async function WorkspacePage() {
         <PageHeader
           eyebrow="Workspace"
           title="What do you want to do?"
-          lede="Choose a demo person from the account menu. Avery pays people, Noor receives payments, Jules buys files, and Sam reviews records. No password is stored."
+          lede="Pick a demo person in the account menu. No password. Avery pays people. Noor gets paid. Jules buys files. Sam reviews records."
         />
-        <p className="banner">Nothing is in progress until you enter. Practice payments are labeled, and this preview does not broadcast a Zcash transaction.</p>
+        <p className="banner">Practice payments stay on this site. They are not sent on the network.</p>
         <TaskLauncher />
       </div>
     );

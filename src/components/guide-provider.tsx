@@ -273,10 +273,9 @@ function WelcomeDialog({ onTour, onClose }: { onTour: () => void; onClose: () =>
             ×
           </button>
         </header>
-        <h2 id={titleId}>Private payments, with a clear result.</h2>
-        <p>ASH helps you pay someone, exchange a private file, or show what happened, without handing over more than the next step needs.</p>
-        <p>You can pay a group, receive a tip, buy or sell a file, pay for a request, or share a limited record with a reviewer.</p>
-        <p className="muted">Choose a demo person from the account menu when you are ready. Nothing in a guide sends a payment or shares a record for you.</p>
+        <h2 id={titleId}>Pay someone privately, then keep a receipt.</h2>
+        <p>You can pay people, send a locked file, or show one payment to a reviewer. They only see that.</p>
+        <p className="muted">Pick a demo person in the account menu. A guide never sends a payment for you.</p>
         <div className="row">
           <button type="button" onClick={onTour}>
             Take a quick tour

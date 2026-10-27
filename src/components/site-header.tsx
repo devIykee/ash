@@ -19,10 +19,10 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
             How it works
           </a>
           <a href="#privacy" onClick={() => setOpen(false)}>
-            Privacy and security
+            Privacy
           </a>
           <Link href="/docs" onClick={() => setOpen(false)}>
-            Documentation
+            Docs
           </Link>
           <Link className="button small" href="/workspace">
             {signedIn ? "Go to workspace" : "Open ASH"}

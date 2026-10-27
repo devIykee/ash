@@ -9,57 +9,56 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         <section className="hero">
           <div className="split">
             <div className="hero-copy rise">
-              <p className="kicker">ASH</p>
-              <h1 className="display">Private payments. Clear outcomes.</h1>
-              <p className="lede">ASH helps people and AI agents pay, exchange digital resources, and verify what happened without exposing more information than necessary.</p>
+              <h1 className="display">Pay someone privately, then keep a short receipt.</h1>
+              <p className="lede">You can also send a locked file, or show one payment to a reviewer. They only see that.</p>
               <div className="row">
                 <Link className="button" href="/workspace">
-                  Explore ASH
+                  Open ASH
                 </Link>
                 <a className="button quiet" href="#how">
                   How it works
                 </a>
               </div>
-              <p className="fine">This preview speaks in Zcash testnet terms and records practice payments. It does not broadcast a transaction, and it does not show a payment as confirmed before its own check finishes.</p>
+              <p className="fine">This is a testnet preview. Practice payments are not sent on the network.</p>
             </div>
-            <figure className="stage rise rise-late" aria-label="Illustrative example of a private payment">
-              <figcaption className="kicker">Illustrative example. Not a live payment.</figcaption>
+            <figure className="stage rise rise-late" aria-label="Example of a private payment. Not a real payment.">
+              <figcaption className="kicker">Example only. Not a real payment.</figcaption>
               <ol>
                 <li>
                   <span className="n">1</span>
                   <span>
-                    <strong>Payment prepared</strong>
+                    <strong>You write the payment</strong>
                     <br />
-                    <small>0.01 ZEC to a contractor, with the purpose written down.</small>
+                    <small>Who it is for, the amount, and why.</small>
                   </span>
                   <small>Draft</small>
                 </li>
                 <li>
                   <span className="n">2</span>
                   <span>
-                    <strong>Payment checked</strong>
+                    <strong>ASH checks it</strong>
                     <br />
-                    <small>ASH waits until the payment record is accepted.</small>
+                    <small>You wait until the check finishes.</small>
                   </span>
                   <small>Checking</small>
                 </li>
                 <li>
                   <span className="n">3</span>
                   <span>
-                    <strong>Task completed</strong>
+                    <strong>The task finishes</strong>
                     <br />
-                    <small>The file opens, or the payment run finishes.</small>
+                    <small>The file opens, or the people are paid.</small>
                   </span>
                   <small>Done</small>
                 </li>
                 <li>
                   <span className="n">4</span>
                   <span>
-                    <strong>Short receipt</strong>
+                    <strong>You keep a receipt</strong>
                     <br />
-                    <small>Amount, purpose, and what was shared. Nothing else.</small>
+                    <small>The amount and the reason. Nothing else.</small>
                   </span>
-                  <small>Kept</small>
+                  <small>Saved</small>
                 </li>
               </ol>
             </figure>
@@ -67,108 +66,105 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section className="band" id="problem">
-          <p className="kicker">The problem</p>
+          <p className="kicker">Why</p>
           <div className="split">
-            <h2>The other person needs the outcome, not your whole history.</h2>
-            <div className="stack">
-              <p>People send money, buy a file, pay for a service, or show that a payment happened. Doing that should not require exposing unrelated activity, or handing over access the other party does not need.</p>
-              <p className="muted">A public payment trail can reveal more than the one transfer. A password, a full account view, or an exported wallet history can do the same. ASH keeps one task in one record.</p>
-            </div>
+            <h2>Show this payment. Not every payment.</h2>
+            <p>Paying someone, buying a file, or proving one payment should not mean handing over your whole history.</p>
           </div>
         </section>
 
         <section className="band" id="how">
-          <p className="kicker">How ASH works</p>
-          <h2>Four steps, then a record you can explain.</h2>
+          <p className="kicker">How it works</p>
+          <h2>Four steps.</h2>
           <ol className="steps">
             <li>
               <span className="n">1</span>
-              <h3>Set up the task</h3>
-              <p className="muted">Choose what you want to pay for, exchange, or verify.</p>
+              <h3>Choose the task</h3>
+              <p className="muted">A payment, a file, or a record to share.</p>
             </li>
             <li>
               <span className="n">2</span>
-              <h3>Make the payment</h3>
-              <p className="muted">Use the Zcash payment flow this preview supports. Practice mode records it without broadcasting.</p>
+              <h3>Pay</h3>
+              <p className="muted">ASH checks that the payment went through.</p>
             </li>
             <li>
               <span className="n">3</span>
-              <h3>Complete the task</h3>
-              <p className="muted">ASH checks the payment record, then the delivery or the access change.</p>
+              <h3>Finish</h3>
+              <p className="muted">The file opens, or the receipt is ready.</p>
             </li>
             <li>
               <span className="n">4</span>
-              <h3>Keep the details private</h3>
-              <p className="muted">Share the receipt, the file, or the summary needed for the next step.</p>
+              <h3>Share only that</h3>
+              <p className="muted">Not your other payments or files.</p>
             </li>
           </ol>
         </section>
 
         <section className="band" id="capabilities">
           <p className="kicker">What you can do</p>
-          <h2>Start from the job, not from a list of modules.</h2>
+          <h2>Three kinds of tasks.</h2>
           <div className="cap-grid">
             <article className="cap">
               <div>
-                <h3>Pay privately</h3>
-                <p className="muted">Move money for a clear purpose, then keep a receipt of that purpose.</p>
+                <h3>Pay</h3>
+                <p className="muted">Send money for one reason, and keep a receipt.</p>
               </div>
               <ul>
                 <li>
-                  <strong>Pay a group of contractors.</strong>
-                  <span className="muted">Check the batch, approve it, then record each payment. A failed line can be retried on its own.</span>
+                  <strong>Pay a group of people.</strong>
+                  <span className="muted">One list. If one payment fails, retry that person only.</span>
                 </li>
                 <li>
-                  <strong>Receive tips.</strong>
-                  <span className="muted">Publish a page and a wallet request. The receipt lists only the fields you included.</span>
+                  <strong>Receive a tip.</strong>
+                  <span className="muted">Share a page. The receipt shows only what you include.</span>
                 </li>
                 <li>
                   <strong>Pay for one request.</strong>
-                  <span className="muted">A research note is returned once, after that request’s payment is accepted.</span>
+                  <span className="muted">Pay once, then you get the result.</span>
                 </li>
                 <li>
-                  <strong>Renew a subscription.</strong>
-                  <span className="muted">Each period is a separate payment. ASH does not charge a wallet on a schedule.</span>
-                </li>
-              </ul>
-            </article>
-            <article className="cap">
-              <div>
-                <h3>Exchange digital resources</h3>
-                <p className="muted">Send a file that the recipient opens on their own device.</p>
-              </div>
-              <ul>
-                <li>
-                  <strong>Buy or sell an encrypted file.</strong>
-                  <span className="muted">Encryption happens in the browser before upload. The server stores ciphertext.</span>
-                </li>
-                <li>
-                  <strong>Exchange with another person.</strong>
-                  <span className="muted">The sender allows delivery, then the buyer pays. This is not an escrow service.</span>
-                </li>
-                <li>
-                  <strong>Check the file afterward.</strong>
-                  <span className="muted">A fingerprint helps you see whether the opened file matches what was published.</span>
+                  <strong>Renew access.</strong>
+                  <span className="muted">Each renewal is a new payment you approve.</span>
                 </li>
               </ul>
             </article>
             <article className="cap">
               <div>
-                <h3>Control what others can see</h3>
-                <p className="muted">Share a narrow record, and say plainly what that record does not prove.</p>
+                <h3>Send a file</h3>
+                <p className="muted">The other person opens it on their own device.</p>
               </div>
               <ul>
                 <li>
-                  <strong>Give a reviewer limited access.</strong>
-                  <span className="muted">A written summary can be withdrawn in ASH. A viewing-key disclosure cannot be narrowed to one date, and ASH does not hold the key.</span>
+                  <strong>Buy or sell a locked file.</strong>
+                  <span className="muted">The file is locked in the browser before it is uploaded.</span>
                 </li>
                 <li>
-                  <strong>Check a memo.</strong>
-                  <span className="muted">Warnings run in the browser. The memo is not uploaded with the check.</span>
+                  <strong>Hand it over.</strong>
+                  <span className="muted">The sender allows it, then the buyer pays. This is not an escrow service.</span>
                 </li>
                 <li>
-                  <strong>Prepare evidence.</strong>
-                  <span className="muted">A signed package describes what ASH stored. It does not turn an unverified claim into a fact.</span>
+                  <strong>Check the file.</strong>
+                  <span className="muted">A fingerprint shows whether the file changed.</span>
+                </li>
+              </ul>
+            </article>
+            <article className="cap">
+              <div>
+                <h3>Choose what others see</h3>
+                <p className="muted">Share one note, not the whole account.</p>
+              </div>
+              <ul>
+                <li>
+                  <strong>Let a reviewer read one note.</strong>
+                  <span className="muted">You can take that note back. ASH does not hold a viewing key.</span>
+                </li>
+                <li>
+                  <strong>Check a payment note.</strong>
+                  <span className="muted">Look for private details before you send it. The note stays in this browser.</span>
+                </li>
+                <li>
+                  <strong>Save a dispute record.</strong>
+                  <span className="muted">It shows what ASH stored. It does not prove more than that.</span>
                 </li>
               </ul>
             </article>
@@ -176,38 +172,38 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section className="band" id="privacy">
-          <p className="kicker">Privacy and trust</p>
-          <h2>Private where the payment network allows it. Limited everywhere else.</h2>
+          <p className="kicker">Privacy</p>
+          <h2>What is private, and what is not.</h2>
           <div className="compare">
             <article>
-              <h3>What ASH uses</h3>
+              <h3>Private</h3>
               <ul>
-                <li>Shielded Zcash payment instructions, where the flow supports them.</li>
-                <li>Files encrypted before they leave the sender’s browser, then opened on the recipient’s device.</li>
-                <li>Receipts and evidence that list the fields someone chose to include.</li>
+                <li>The payment can be private on Zcash.</li>
+                <li>A locked file is opened by the recipient, not by ASH.</li>
+                <li>A receipt lists only the fields you included.</li>
               </ul>
             </article>
             <article>
-              <h3>What it does not do</h3>
+              <h3>Not private</h3>
               <ul>
-                <li>Payment privacy does not hide every detail of using ASH.</li>
-                <li>Other people still see what you deliberately share.</li>
-                <li>ASH may process transaction references and operational records.</li>
-                <li>Someone who decrypts a file can copy it. Encryption does not prevent that.</li>
+                <li>Using the app can still be seen.</li>
+                <li>People see what you choose to send them.</li>
+                <li>ASH keeps a history of the actions on a task.</li>
+                <li>After a file is opened, it can be copied.</li>
               </ul>
             </article>
           </div>
-          <p className="fine">ASH does not provide perfect anonymity, total secrecy, or protection from every form of tracking. Practice payments are labeled. A transaction id seen on the network is not proof of the amount, the recipient, or the memo.</p>
+          <p className="fine">ASH is not fully anonymous. Practice payments are labeled. Seeing a transaction on the network does not prove the amount, the person, or the note.</p>
         </section>
 
         <section className="band closing">
-          <h2>Open the workspace and start a real task.</h2>
+          <h2>Open ASH and pick a task.</h2>
           <div className="row">
             <Link className="button" href="/workspace">
-              Explore ASH
+              Open ASH
             </Link>
             <Link className="button quiet" href="/docs">
-              Read the documentation
+              Read the docs
             </Link>
           </div>
         </section>
@@ -222,7 +218,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             <a href="https://github.com/devIykee/ash">GitHub</a>
             <Link href="/docs/CONTRIBUTING">Project</Link>
           </nav>
-          <p className="fine">ASH is open source. No contact address is configured beyond the project repository.</p>
+          <p className="fine">ASH is open source. The GitHub project is the contact.</p>
         </div>
       </footer>
     </div>
