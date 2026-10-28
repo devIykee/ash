@@ -1,46 +1,52 @@
+import { Bot, FileLock2, FileSearch, Gavel, HandCoins, RefreshCcw, ScanEye, Users, Zap, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 
-const COMMON = [
-  ["/payments/payroll/new?guide=payroll", "Pay a group of people", "Check a batch, approve it, then record each payment."],
-  ["/payments/tips/new?guide=tips", "Receive a private tip", "Publish a page, share a payment link, and keep a short receipt."],
-  ["/commerce?guide=exchange", "Buy or sell a digital resource", "Encrypt a file in the browser, then open it on the recipient’s device."],
-] as const;
+type Task = { href: string; title: string; body: string; icon: LucideIcon; tone?: "warm" | "info" };
 
-const MORE = [
-  ["/agents?guide=api", "Pay for an API or online service", "Buy one research note. The same payment works once."],
-  ["/payments/subscriptions?guide=subscription", "Set up recurring payments", "Each renewal is a separate payment you confirm."],
-  ["/privacy/grants?guide=audit", "Review financial information privately", "Share a written summary, or record the limits of a broader disclosure."],
-  ["/privacy/memo?guide=memo", "Check a transaction memo", "Look for sensitive details before the note leaves this browser."],
-  ["/operations?guide=evidence", "Prepare evidence for a dispute", "Prepare a package of what ASH stored. The package does not make a claim true."],
-  ["/agents?guide=agent", "Connect an AI agent", "Create a limited token. The secret is shown once."],
-] as const;
+const COMMON: Task[] = [
+  { href: "/payments/payroll/new?guide=payroll", title: "Pay a group of people", body: "Check a batch, approve it, then record each payment.", icon: Users },
+  { href: "/payments/tips/new?guide=tips", title: "Receive a private tip", body: "Publish a page and a wallet link. Keep a short receipt.", icon: HandCoins, tone: "warm" },
+  { href: "/commerce?guide=exchange", title: "Buy or sell a file", body: "Encrypted in the browser, opened on the buyer’s device.", icon: FileLock2, tone: "info" },
+];
 
-export function TaskLauncher() {
+const MORE: Task[] = [
+  { href: "/payments/subscriptions?guide=subscription", title: "Recurring payments", body: "Each renewal is a payment you confirm.", icon: RefreshCcw },
+  { href: "/agents?guide=api", title: "Pay for an API request", body: "One payment, one response.", icon: Zap, tone: "warm" },
+  { href: "/privacy/grants?guide=audit", title: "Share with a reviewer", body: "A written summary, not your whole account.", icon: ScanEye, tone: "info" },
+  { href: "/privacy/memo?guide=memo", title: "Check a memo", body: "Find private details before they leave.", icon: FileSearch },
+  { href: "/operations?guide=evidence", title: "Prepare dispute evidence", body: "A sealed package of what ASH stored.", icon: Gavel, tone: "warm" },
+  { href: "/agents?guide=agent", title: "Connect an AI agent", body: "A limited token. Shown once.", icon: Bot, tone: "info" },
+];
+
+function Tiles({ tasks }: { tasks: Task[] }) {
   return (
-    <section className="groups" data-guide="task-launcher">
-      <div className="group">
+    <div className="tiles">
+      {tasks.map((task) => {
+        const Icon = task.icon;
+        return (
+          <Link className="tile" key={task.href} href={task.href} data-tone={task.tone}>
+            <span className="tile-icon" aria-hidden="true">
+              <Icon size={19} />
+            </span>
+            <strong>{task.title}</strong>
+            <span>{task.body}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export function TaskLauncher({ compact = false }: { compact?: boolean }) {
+  return (
+    <section className="section" data-guide="task-launcher">
+      <div className="section-head">
         <h2>Start something new</h2>
-        <p className="muted">Common tasks open the real page, with a short guide you can exit.</p>
-        <div className="task-list">
-          {COMMON.map(([href, title, body]) => (
-            <Link className="task-link" key={href} href={href}>
-              <strong>{title}</strong>
-              <span className="muted">{body}</span>
-            </Link>
-          ))}
-        </div>
+        <span className="muted" style={{ fontSize: "0.9rem" }}>
+          Each task opens with a short guide you can exit.
+        </span>
       </div>
-      <div className="group">
-        <h2>Other tasks</h2>
-        <div className="task-list">
-          {MORE.map(([href, title, body]) => (
-            <Link className="task-link" key={href} href={href}>
-              <strong>{title}</strong>
-              <span className="muted">{body}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+      <Tiles tasks={compact ? COMMON : [...COMMON, ...MORE]} />
     </section>
   );
 }

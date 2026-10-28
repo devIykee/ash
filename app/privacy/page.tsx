@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { BookOpen, FileSearch, ScanEye } from "lucide-react";
+import { HubTiles } from "@/components/hub-tiles";
 import { PageHeader } from "@/components/page-header";
 
 export const metadata = { title: "Privacy" };
@@ -11,20 +12,13 @@ export default function PrivacyPage() {
         title="Share less than the whole account."
         lede="Check a memo before it leaves this browser, or give a reviewer a record with a stated limit."
       />
-      <div className="task-list">
-        <Link className="task-link" href="/privacy/memo">
-          <strong>Check a memo</strong>
-          <span className="muted">Look for emails, phone numbers, and invoice references. The memo is not uploaded with the check.</span>
-        </Link>
-        <Link className="task-link" href="/privacy/grants">
-          <strong>Limited audit access</strong>
-          <span className="muted">Share a written summary, or record that a viewing key would reveal the whole account.</span>
-        </Link>
-        <Link className="task-link" href="/docs/PRIVACY">
-          <strong>Privacy notes</strong>
-          <span className="muted">The engineering explanation of metadata, receipts, and what the network hides.</span>
-        </Link>
-      </div>
+      <HubTiles
+        tiles={[
+          { href: "/privacy/memo", title: "Check a memo", body: "Find emails, phone numbers, and invoice references. The memo is not uploaded.", icon: FileSearch },
+          { href: "/privacy/grants", title: "Limited audit access", body: "Share a written summary, or record that a viewing key reveals the whole account.", icon: ScanEye, tone: "info" },
+          { href: "/docs/PRIVACY", title: "Privacy notes", body: "What the network hides, what receipts show, and what metadata remains.", icon: BookOpen, tone: "warm" },
+        ]}
+      />
     </div>
   );
 }

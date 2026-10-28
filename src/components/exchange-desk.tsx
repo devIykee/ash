@@ -12,6 +12,7 @@ import { storage } from "@/client/storage";
 import { ConfirmDialog } from "./confirm-dialog";
 import { HelpNote } from "./help-note";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 import { validTxId, WalletStep } from "./wallet-step";
 import { sha256Hex } from "@/crypto/pack";
 
@@ -32,6 +33,7 @@ type Desk = {
 
 export function ExchangeDesk(props: Desk) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [pastedKey, setPastedKey] = useState("");
@@ -39,12 +41,13 @@ export function ExchangeDesk(props: Desk) {
   const [confirm, setConfirm] = useState<"release" | "pay" | "fail" | null>(null);
   const [txId, setTxId] = useState("");
 
-  async function run(work: () => Promise<void>) {
+  async function run(work: () => Promise<void>, message?: string) {
     setPending(true);
     setError("");
     try {
       await work();
       setConfirm(null);
+      if (message) toast(message);
       router.refresh();
     } catch (caught) {
       setError(presentError(caught, "We couldn't complete that step. The file was not opened."));
@@ -177,7 +180,7 @@ export function ExchangeDesk(props: Desk) {
         </button>
       ) : null}
       {props.role === "buyer" && props.state === "payment_verified" ? (
-        <button className="quiet" type="button" disabled={pending} onClick={() => run(() => api(`/api/ash/exchanges/${props.id}/ack`, { body: { expectedVersion: props.version } }).then(() => undefined))}>
+        <button className="quiet" type="button" disabled={pending} onClick={() => run(() => api(`/api/ash/exchanges/${props.id}/ack`, { body: { expectedVersion: props.version } }).then(() => undefined), "Exchange marked finished.")}>
           Mark finished
         </button>
       ) : null}
@@ -198,7 +201,7 @@ export function ExchangeDesk(props: Desk) {
         confirmLabel="Allow delivery"
         pending={pending}
         onClose={() => setConfirm(null)}
-        onConfirm={() => run(release)}
+        onConfirm={() => run(release, "Delivery allowed. The buyer can pay now.")}
       />
       <ConfirmDialog
         open={confirm === "pay"}
@@ -211,7 +214,7 @@ export function ExchangeDesk(props: Desk) {
         confirmLabel={props.practice ? "Record practice payment" : "Look up transaction"}
         pending={pending}
         onClose={() => setConfirm(null)}
-        onConfirm={() => run(pay)}
+        onConfirm={() => run(pay, props.practice ? "Payment recorded. You can open the file." : "Transaction looked up.")}
       />
       <ConfirmDialog
         open={confirm === "fail"}

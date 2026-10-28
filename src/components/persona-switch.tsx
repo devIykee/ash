@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronsUpDown, LogOut } from "lucide-react";
+import { initials } from "./format";
 import { roleLabel } from "./labels";
+import { useToast } from "./toast";
 
 const PEOPLE = [
   { id: "user_avery", name: "Avery Chen", role: "operator" },
@@ -18,6 +21,7 @@ export function PersonaSwitch({ current }: { current: { id: string; name: string
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -49,35 +53,56 @@ export function PersonaSwitch({ current }: { current: { id: string; name: string
       return;
     }
     setOpen(false);
+    toast(`Signed in as ${PEOPLE.find((person) => person.id === userId)?.name ?? "demo account"}.`);
     router.refresh();
   }
 
   async function leave() {
     await fetch("/api/ash/session", { method: "DELETE" });
     setOpen(false);
+    toast("Signed out.");
     router.refresh();
   }
 
-  const label = current ? `${current.name}` : "Demo account";
-
   return (
     <div className="persona" ref={rootRef} data-guide="account-menu">
-      <button className="persona-button quiet small" type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((value) => !value)}>
-        {label}
+      <button className="persona-button" type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((value) => !value)} aria-label={current ? `Account: ${current.name}` : "Choose a demo account"}>
+        <span className="avatar" aria-hidden="true">
+          {current ? initials(current.name) : "?"}
+        </span>
+        <span className="who">
+          {current ? current.name : "Demo account"}
+          <small>{current ? roleLabel(current.role) : "Not signed in"}</small>
+        </span>
+        <ChevronsUpDown className="chev" size={16} aria-hidden="true" />
       </button>
       {open ? (
         <div className="persona-panel" id={panelId} role="group" aria-label="Demo accounts">
-          <p className="muted">{current ? `${roleLabel(current.role)}. No password is stored.` : "Choose a demo person. No password is stored."}</p>
+          <p className="muted">Switch demo person. No password is stored.</p>
           <div className="persona-grid">
             {PEOPLE.map((person) => (
-              <button key={person.id} className={current?.id === person.id ? "small" : "quiet small"} type="button" onClick={() => choose(person.id)} disabled={pending === person.id}>
-                {person.name}
-                <span className="sr-only">, {roleLabel(person.role)}</span>
+              <button
+                key={person.id}
+                className="persona-option"
+                type="button"
+                aria-current={current?.id === person.id ? "true" : undefined}
+                onClick={() => choose(person.id)}
+                disabled={pending === person.id}
+              >
+                <span className="avatar" aria-hidden="true">
+                  {initials(person.name)}
+                </span>
+                <span className="who">
+                  {person.name}
+                  <small>{roleLabel(person.role)}</small>
+                </span>
+                {current?.id === person.id ? <Check className="check" size={16} aria-hidden="true" /> : null}
               </button>
             ))}
           </div>
           {current ? (
-            <button className="quiet small" type="button" onClick={leave}>
+            <button className="persona-option persona-signout" type="button" onClick={leave}>
+              <LogOut size={16} aria-hidden="true" />
               Sign out
             </button>
           ) : null}

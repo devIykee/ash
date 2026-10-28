@@ -7,9 +7,11 @@ import { api, freshKey } from "@/client/api";
 import { storage } from "@/client/storage";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 
 export function BuyButton({ offerId, disabled, title, price }: { offerId: string; disabled: boolean; title: string; price: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -32,6 +34,7 @@ export function BuyButton({ offerId, disabled, title, price }: { offerId: string
         idempotencyKey: freshKey("buy"),
       });
       setConfirm(false);
+      toast("Purchase started. The seller allows delivery next.");
       router.push(`/commerce/exchanges/${opened.operation.id}`);
       router.refresh();
     } catch (caught) {

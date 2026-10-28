@@ -6,11 +6,13 @@ import { api, freshKey } from "@/client/api";
 import { ConfirmDialog } from "./confirm-dialog";
 import { HelpNote } from "./help-note";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 import { addressPlaceholder, sampleAddress, type Runtime } from "./runtime";
 import { validTxId, WalletStep } from "./wallet-step";
 
 export function TipForm({ runtime }: { runtime: Runtime }) {
   const router = useRouter();
+  const toast = useToast();
   const fixture = sampleAddress(runtime);
   const [title, setTitle] = useState("Studio jar");
   const [address, setAddress] = useState(fixture);
@@ -27,6 +29,7 @@ export function TipForm({ runtime }: { runtime: Runtime }) {
         body: { title, address, statement, suggestedZec: ["0.001", "0.01"] },
         idempotencyKey: freshKey("tip"),
       });
+      toast("Tip page published. Share the link.");
       router.push(`/payments/tips/${created.operation.id}`);
       router.refresh();
     } catch (caught) {
@@ -64,6 +67,7 @@ export function TipForm({ runtime }: { runtime: Runtime }) {
 
 export function TipPay({ id, suggested, address, uri, practice }: { id: string; suggested: string[]; address: string; uri: string; practice: boolean }) {
   const router = useRouter();
+  const toast = useToast();
   const [amount, setAmount] = useState(suggested[0] ?? "0.001");
   const [memo, setMemo] = useState("");
   const [includeMemo, setIncludeMemo] = useState(false);
@@ -86,7 +90,10 @@ export function TipPay({ id, suggested, address, uri, practice }: { id: string; 
         idempotencyKey: freshKey("tippay"),
       });
       setConfirm(false);
-      if (result.receipt) setReceiptId(result.receipt.id);
+      if (result.receipt) {
+        setReceiptId(result.receipt.id);
+        toast("Tip recorded. Your receipt is ready.");
+      }
       else
         setInfo(
           result.payment.status === "observed"
@@ -110,10 +117,10 @@ export function TipPay({ id, suggested, address, uri, practice }: { id: string; 
         setConfirm(true);
       }}
     >
-      <div className="row" data-guide="tip-amount">
+      <div className="amount-chips" data-guide="tip-amount" role="group" aria-label="Suggested amounts">
         {suggested.map((value) => (
-          <button className={amount === value ? "" : "quiet"} type="button" key={value} onClick={() => setAmount(value)} aria-pressed={amount === value}>
-            {value} ZEC
+          <button className="amount-chip" type="button" key={value} onClick={() => setAmount(value)} aria-pressed={amount === value}>
+            {value} <small>ZEC</small>
           </button>
         ))}
       </div>

@@ -101,7 +101,11 @@ export function GuideProvider({ children }: { children: ReactNode }) {
       setTarget(null);
       return;
     }
-    const node = document.querySelector<HTMLElement>(`[data-guide="${step.target}"]`);
+    // The sidebar and the phone bar can both carry a target. Use the one on screen.
+    const node =
+      [...document.querySelectorAll<HTMLElement>(`[data-guide="${step.target}"], [data-guide="${step.target}-mobile"]`)].find(
+        (item) => item.getClientRects().length > 0,
+      ) ?? null;
     if (!node || node.getClientRects().length === 0) {
       setTarget(null);
       return;

@@ -5,28 +5,28 @@ import { useState, type FormEvent } from "react";
 import { api, freshKey } from "@/client/api";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 import { addressPlaceholder, sampleAddress, type Runtime } from "./runtime";
 import { validTxId, WalletStep } from "./wallet-step";
 
 export function PlanForm({ runtime }: { runtime: Runtime }) {
   const router = useRouter();
+  const toast = useToast();
   const fixture = sampleAddress(runtime);
   const [title, setTitle] = useState("Research feed");
   const [description, setDescription] = useState("A renewal, not an automatic debit.");
   const [price, setPrice] = useState("0.001");
   const [payTo, setPayTo] = useState(fixture);
   const [error, setError] = useState("");
-  const [done, setDone] = useState("");
   const [pending, setPending] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    setDone("");
     setPending(true);
     try {
       await api("/api/ash/plans", { body: { title, description, priceZec: price, payTo: payTo.trim() || undefined, intervalDays: 30, graceDays: 3 } });
-      setDone(`${title} is published.`);
+      toast(`${title} is published.`);
       router.refresh();
     } catch (caught) {
       setError(presentError(caught, "We couldn't publish the plan. Nobody was charged."));
@@ -58,7 +58,6 @@ export function PlanForm({ runtime }: { runtime: Runtime }) {
       <button type="submit" disabled={pending}>
         {pending ? "Publishing" : "Publish plan"}
       </button>
-      {done ? <p className="banner ok">{done}</p> : null}
       {error ? <p className="alert">{error}</p> : null}
     </form>
   );
@@ -66,6 +65,7 @@ export function PlanForm({ runtime }: { runtime: Runtime }) {
 
 export function SubscribeButton({ offerId, title, price }: { offerId: string; title: string; price: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -88,6 +88,7 @@ export function SubscribeButton({ offerId, title, price }: { offerId: string; ti
           try {
             await api("/api/ash/subscriptions", { body: { offerId }, idempotencyKey: freshKey("sub") });
             setOpen(false);
+            toast("Subscribed. Pay for the first period below.");
             router.refresh();
           } catch (caught) {
             setError(presentError(caught, "We couldn't start the subscription. Check whether a payment was recorded before trying again."));
@@ -118,6 +119,7 @@ export function SubscriptionActions({
   payTo?: string | null;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState<"renew" | "cancel" | null>(null);
@@ -133,6 +135,7 @@ export function SubscriptionActions({
       await api(path, withVersion ? { body: { expectedVersion: version, ...extra }, idempotencyKey: freshKey("subact") } : { method: "POST", body: {} });
       setTxId("");
       setPaying(false);
+      toast(path.endsWith("/cancel") ? "Future renewals cancelled." : path.endsWith("/refresh") ? "Period checked." : practice ? "Payment recorded." : "Transaction looked up.");
       setConfirm(null);
       router.refresh();
     } catch (caught) {

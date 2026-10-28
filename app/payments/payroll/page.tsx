@@ -1,8 +1,10 @@
+import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { GuideStart } from "@/components/guide-provider";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
+import { relativeTime } from "@/components/format";
+import { RecordList } from "@/components/record-list";
 import { listPayroll } from "@/services/payroll";
 import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
@@ -21,7 +23,7 @@ export default async function PayrollListPage() {
         actions={
           actor.user.role === "operator" ? (
             <Link className="button" href="/payments/payroll/new">
-              New payment run
+              <Plus size={16} aria-hidden="true" /> New payment run
             </Link>
           ) : (
             <GuideStart id="payroll">How payment runs work</GuideStart>
@@ -32,6 +34,7 @@ export default async function PayrollListPage() {
       <div data-guide="payroll-list" className="stack">
         {runs.length === 0 ? (
           <EmptyState
+            icon={Users}
             title="No payment runs yet"
             body="Create a run when you know who to pay. Nothing is sent until you approve the run and then record the payments."
             action={
@@ -45,12 +48,18 @@ export default async function PayrollListPage() {
             }
           />
         ) : (
-          runs.map((run) => (
-            <Link className="card" key={run.id} href={`/payments/payroll/${run.id}`}>
-              <h3>{run.label}</h3>
-              <StatusPill value={run.state} />
-            </Link>
-          ))
+          <RecordList
+            label="Payment runs"
+            rows={runs
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              .map((run) => ({
+                href: `/payments/payroll/${run.id}`,
+                title: run.label,
+                type: "payroll_run",
+                sub: `Updated ${relativeTime(run.updatedAt)}`,
+                state: run.state,
+              }))}
+          />
         )}
       </div>
     </div>

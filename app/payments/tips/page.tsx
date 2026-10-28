@@ -1,3 +1,5 @@
+import { HandCoins, Plus } from "lucide-react";
+import { RecordList } from "@/components/record-list";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -20,7 +22,7 @@ export default async function TipsPage() {
         actions={
           canPublish ? (
             <Link className="button" href="/payments/tips/new">
-              New tip page
+              <Plus size={16} aria-hidden="true" /> New tip page
             </Link>
           ) : null
         }
@@ -28,6 +30,7 @@ export default async function TipsPage() {
       <div data-guide="tip-list">
         {tips.length === 0 ? (
           <EmptyState
+            icon={HandCoins}
             title="No tip pages yet"
             body={actor ? "Publish a page when you want a link people can pay. Anyone with the link can open it." : "Sign in as Noor Hale to publish a page. Anyone with the link can open it afterward."}
             action={
@@ -39,13 +42,10 @@ export default async function TipsPage() {
             }
           />
         ) : (
-          <div className="stack">
-            {tips.map((tip) => (
-              <Link className="card" key={tip.id} href={`/payments/tips/${tip.id}`}>
-                <h3>{tip.title}</h3>
-              </Link>
-            ))}
-          </div>
+          <RecordList
+            label="Tip pages"
+            rows={tips.map((tip) => ({ href: `/payments/tips/${tip.id}`, title: tip.title, type: "tip", sub: "Public tip page. Anyone with the link can pay." }))}
+          />
         )}
       </div>
     </div>

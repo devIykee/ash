@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "./toast";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api } from "@/client/api";
@@ -16,6 +17,7 @@ const COPY = {
 
 export function GrantForm() {
   const router = useRouter();
+  const toast = useToast();
   const [capability, setCapability] = useState<keyof typeof COPY>("filtered_report");
   const [scopeNote, setScopeNote] = useState("October contractor total, application filter only.");
   const [reportText, setReportText] = useState("Two lines, 0.03 ZEC, fees separate.");
@@ -37,6 +39,7 @@ export function GrantForm() {
         },
       });
       setConfirm(false);
+      toast("Access shared with Sam.");
       router.refresh();
     } catch (caught) {
       setError(presentError(caught, "We couldn't create this access record. Nothing extra was shared."));
@@ -107,6 +110,7 @@ export function GrantForm() {
 
 export function WithdrawGrant({ id, version, viewing }: { id: string; version: number; viewing: boolean }) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -132,6 +136,7 @@ export function WithdrawGrant({ id, version, viewing }: { id: string; version: n
           try {
             await api(`/api/ash/grants/${id}/withdraw`, { body: { expectedVersion: version } });
             setOpen(false);
+            toast("Access withdrawn.");
             router.refresh();
           } catch (caught) {
             setError(presentError(caught, "We couldn't withdraw this access. The record is unchanged."));

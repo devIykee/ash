@@ -7,10 +7,12 @@ import { zatoshiToZec } from "@/domain/money";
 import { encodePaymentSignature, parsePaymentRequired } from "@sdk";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 import { validTxId, WalletStep } from "./wallet-step";
 
 export function AgentForm() {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState("Research buyer");
   const [budget, setBudget] = useState("0.01");
   const [token, setToken] = useState("");
@@ -26,6 +28,7 @@ export function AgentForm() {
         body: { name, budgetZec: budget, scopes: ["read", "pay", "exchange"] },
       });
       setToken(created.token);
+      toast("Token created. Copy it now. It is shown once.");
       setConfirm(false);
       router.refresh();
     } catch (caught) {
@@ -76,6 +79,7 @@ export function AgentForm() {
 
 export function RevokeAgent({ id }: { id: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -98,6 +102,7 @@ export function RevokeAgent({ id }: { id: string }) {
           try {
             await api(`/api/ash/agents/${id}`, { method: "DELETE" });
             setOpen(false);
+            toast("Token revoked.");
             router.refresh();
           } catch (caught) {
             setError(presentError(caught, "We couldn't revoke the token. It may still be active."));

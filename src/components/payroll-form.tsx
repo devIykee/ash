@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, freshKey } from "@/client/api";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 import { addressPlaceholder, sampleAddress, TESTNET_FIXTURES, type Runtime } from "./runtime";
 
 type Line = { key: string; label: string; address: string; amountZec: string };
@@ -23,6 +24,7 @@ function addressPrefixOk(address: string, runtime: Runtime): boolean {
 
 export function PayrollForm({ runtime }: { runtime: Runtime }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState("October contributors");
   const [lines, setLines] = useState<Line[]>(() => [
     { key: lineKey(), label: "Ada", address: sampleAddress(runtime, 0), amountZec: "0.01" },
@@ -60,6 +62,7 @@ export function PayrollForm({ runtime }: { runtime: Runtime }) {
         body: { name, lines: lines.map(({ label, address, amountZec }) => ({ label: label.trim(), address: address.trim(), amountZec: amountZec.trim() })) },
         idempotencyKey: freshKey("payroll"),
       });
+      toast("Payment run checked and saved.");
       router.push(`/payments/payroll/${created.operation.id}`);
       router.refresh();
     } catch (caught) {

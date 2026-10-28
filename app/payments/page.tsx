@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { HandCoins, RefreshCcw, Users, Zap } from "lucide-react";
+import { HubTiles } from "@/components/hub-tiles";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { GuideStart } from "@/components/guide-provider";
 
@@ -20,24 +21,14 @@ export default function PaymentsPage() {
           { title: "If it fails", body: "Retry the failed line. Completed lines are not paid again." },
         ]}
       />
-      <div className="task-list">
-        <Link className="task-link" href="/payments/payroll">
-          <strong>Pay a group</strong>
-          <span className="muted">Check a batch, approve it, then record each payment.</span>
-        </Link>
-        <Link className="task-link" href="/payments/tips">
-          <strong>Receive a tip</strong>
-          <span className="muted">Publish a page and a wallet request. The receipt lists only the fields you include.</span>
-        </Link>
-        <Link className="task-link" href="/payments/subscriptions">
-          <strong>Renew access</strong>
-          <span className="muted">Each period is a new payment. ASH does not charge a wallet on a schedule.</span>
-        </Link>
-        <Link className="task-link" href="/agents">
-          <strong>Pay for one request</strong>
-          <span className="muted">Buy the research note. The payment reference works once.</span>
-        </Link>
-      </div>
+      <HubTiles
+        tiles={[
+          { href: "/payments/payroll", title: "Pay a group", body: "Check a batch, approve it, then record each payment.", icon: Users },
+          { href: "/payments/tips", title: "Receive a tip", body: "Publish a page and a wallet request. The receipt lists only what you include.", icon: HandCoins, tone: "warm" },
+          { href: "/payments/subscriptions", title: "Renew access", body: "Each period is a new payment. ASH never charges a wallet on a schedule.", icon: RefreshCcw, tone: "info" },
+          { href: "/agents", title: "Pay for one request", body: "Buy the research note. The payment reference works once.", icon: Zap },
+        ]}
+      />
     </div>
   );
 }

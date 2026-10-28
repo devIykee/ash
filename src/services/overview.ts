@@ -23,9 +23,20 @@ export async function overview(tx: Tx, actor: Actor) {
     }));
   const cfg = config();
   const payTo = payToStatus(cfg);
+  const counts = {
+    total: visible.length,
+    attention: visible.filter((item) => ATTENTION.has(item.data.state)).length,
+    checking: visible.filter((item) => item.data.payment?.status === "observed" || item.data.payment?.status === "submitted").length,
+    completed: visible.filter((item) => item.data.state === "completed").length,
+  };
   return {
+    counts,
     cards,
-    attention: cards.filter((card) => ATTENTION.has(card.state)),
+    attention: visible
+      .filter((item) => ATTENTION.has(item.data.state))
+      .sort((a, b) => b.data.updatedAt.localeCompare(a.data.updatedAt))
+      .slice(0, 6)
+      .map((item) => ({ id: item.id, type: item.data.type, state: item.data.state, label: item.data.label, updatedAt: item.data.updatedAt })),
     pendingVerification: visible
       .filter((item) => item.data.payment?.status === "observed" || item.data.payment?.status === "submitted")
       .map((item) => item.id),

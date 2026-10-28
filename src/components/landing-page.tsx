@@ -1,3 +1,4 @@
+import { FileLock2, ShieldCheck, Wallet } from "lucide-react";
 import Link from "next/link";
 import type { Runtime } from "./runtime";
 import { SiteHeader } from "./site-header";
@@ -114,6 +115,9 @@ export function LandingPage({ signedIn, runtime }: { signedIn: boolean; runtime:
           <div className="cap-grid">
             <article className="cap">
               <div>
+                <span className="tile-icon" aria-hidden="true">
+                  <Wallet size={20} />
+                </span>
                 <h3>Pay</h3>
                 <p className="muted">Send money for one reason, and keep a receipt.</p>
               </div>
@@ -136,8 +140,11 @@ export function LandingPage({ signedIn, runtime }: { signedIn: boolean; runtime:
                 </li>
               </ul>
             </article>
-            <article className="cap">
+            <article className="cap" data-tone="info">
               <div>
+                <span className="tile-icon" aria-hidden="true">
+                  <FileLock2 size={20} />
+                </span>
                 <h3>Send a file</h3>
                 <p className="muted">The other person opens it on their own device.</p>
               </div>
@@ -156,8 +163,11 @@ export function LandingPage({ signedIn, runtime }: { signedIn: boolean; runtime:
                 </li>
               </ul>
             </article>
-            <article className="cap">
+            <article className="cap" data-tone="warm">
               <div>
+                <span className="tile-icon" aria-hidden="true">
+                  <ShieldCheck size={20} />
+                </span>
                 <h3>Choose what others see</h3>
                 <p className="muted">Share one note, not the whole account.</p>
               </div>

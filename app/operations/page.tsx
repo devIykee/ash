@@ -1,10 +1,12 @@
 import { recordLabel } from "@/components/labels";
+import { History, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { GuideStart } from "@/components/guide-provider";
 import { typeLabel } from "@/components/labels";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
+import { relativeTime } from "@/components/format";
+import { RecordList } from "@/components/record-list";
 import { listOperations } from "@/services/overview";
 import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
@@ -23,7 +25,7 @@ export default async function OperationsPage() {
         actions={
           <div className="row">
             <Link className="button quiet" href="/operations/verify">
-              Check an evidence package
+              <ShieldCheck size={16} aria-hidden="true" /> Check an evidence package
             </Link>
             <GuideStart id="evidence">Guide evidence</GuideStart>
           </div>
@@ -31,15 +33,18 @@ export default async function OperationsPage() {
       />
       <div data-guide="operation-list" className="stack">
         {items.length === 0 ? (
-          <EmptyState title="No activity yet" body="Payments, file exchanges, memo checks, and access records you take part in will appear here." />
+          <EmptyState icon={History} title="No activity yet" body="Payments, file exchanges, memo checks, and access records you take part in will appear here." />
         ) : (
-          items.map((item) => (
-            <Link className="card" key={item.id} href={`/operations/${item.id}`}>
-              <p className="kicker">{typeLabel(item.type)}</p>
-              <h3>{recordLabel(item.label)}</h3>
-              <StatusPill value={item.state} />
-            </Link>
-          ))
+          <RecordList
+            label="Activity"
+            rows={items.map((item) => ({
+              href: `/operations/${item.id}`,
+              title: recordLabel(item.label),
+              type: item.type,
+              sub: `${typeLabel(item.type)} · ${relativeTime(item.updatedAt)}`,
+              state: item.state,
+            }))}
+          />
         )}
       </div>
     </div>

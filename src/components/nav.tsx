@@ -1,57 +1,140 @@
 "use client";
 
+import {
+  Bot,
+  BookOpen,
+  FileLock2,
+  History,
+  LayoutDashboard,
+  LifeBuoy,
+  ShieldCheck,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 import { PersonaSwitch } from "./persona-switch";
 import { modeLabel, networkLabel, type Runtime } from "./runtime";
+import { ThemeToggle } from "./theme-toggle";
 
-const LINKS = [
-  ["/workspace", "Workspace"],
-  ["/payments", "Payments"],
-  ["/commerce", "Exchange"],
-  ["/privacy", "Privacy"],
-  ["/operations", "Activity"],
-  ["/help", "Help"],
-] as const;
+type User = { id: string; name: string; role: string } | null;
+type NavItem = { href: string; label: string; icon: LucideIcon; guide?: string };
 
-export function AppHeader({ user, runtime }: { user: { id: string; name: string; role: string } | null; runtime: Runtime }) {
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+const MAIN: NavItem[] = [
+  { href: "/workspace", label: "Workspace", icon: LayoutDashboard },
+  { href: "/payments", label: "Payments", icon: Wallet },
+  { href: "/commerce", label: "Exchange", icon: FileLock2 },
+  { href: "/privacy", label: "Privacy", icon: ShieldCheck },
+  { href: "/operations", label: "Activity", icon: History },
+];
+
+const MORE: NavItem[] = [
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/help", label: "Help", icon: LifeBuoy, guide: "help-link" },
+  { href: "/docs", label: "Docs", icon: BookOpen },
+];
+
+function isCurrent(pathname: string, href: string): boolean {
+  if (href === "/payments" && pathname.startsWith("/payments")) return true;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function EnvBadge({ runtime }: { runtime: Runtime }) {
   return (
-    <header className={open ? "topbar menu-open" : "topbar"}>
-      <div className="topbar-inner">
-        <Link className="brand" href="/workspace">
-          <strong>ASH</strong>
-        </Link>
-        <Link
-          className="env-badge"
-          href="/help#network"
-          data-network={runtime.network}
-          data-practice={runtime.practice ? "yes" : "no"}
-          title={runtime.practice ? "Payments are recorded as practice and never broadcast." : "You pay from your own wallet. ASH looks up the transaction id."}
-        >
-          <span>{networkLabel(runtime)}</span>
-          <span className="env-mode">{modeLabel(runtime)}</span>
-        </Link>
-        <button className="nav-toggle quiet small" type="button" aria-expanded={open} aria-controls="app-nav app-tools" onClick={() => setOpen((value) => !value)}>
-          {open ? "Close" : "Menu"}
-        </button>
-        <nav id="app-nav" className={open ? "app-nav open" : "app-nav"} aria-label="Workspace">
-          {LINKS.map(([href, label]) => {
-            const current = pathname === href || pathname.startsWith(`${href}/`);
-            return (
-              <Link key={href} href={href} aria-current={current ? "page" : undefined} data-guide={href === "/help" ? "help-link" : undefined} onClick={() => setOpen(false)}>
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="top-tools" id="app-tools">
-          <Link href="/docs">Docs</Link>
-          <PersonaSwitch current={user} />
-        </div>
+    <Link
+      className="env-badge"
+      href="/help#network"
+      data-network={runtime.network}
+      title={runtime.practice ? "Payments are recorded as practice and never broadcast." : "You pay from your own wallet. ASH looks up the transaction id."}
+    >
+      <span>{networkLabel(runtime)}</span>
+      <span className="env-mode">{modeLabel(runtime)}</span>
+    </Link>
+  );
+}
+
+function Brand() {
+  return (
+    <Link className="brand" href="/workspace" aria-label="ASH workspace">
+      <span className="brand-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 20 12 4l8 16" />
+          <path d="M7.5 13h9" />
+        </svg>
+      </span>
+      ASH
+    </Link>
+  );
+}
+
+function SideLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const Icon = item.icon;
+  return (
+    <Link className="side-link" href={item.href} aria-current={isCurrent(pathname, item.href) ? "page" : undefined} data-guide={item.guide}>
+      <Icon size={18} aria-hidden="true" />
+      {item.label}
+    </Link>
+  );
+}
+
+export function Sidebar({ user, runtime }: { user: User; runtime: Runtime }) {
+  const pathname = usePathname();
+  return (
+    <aside className="sidebar" aria-label="Workspace">
+      <div className="sidebar-top">
+        <Brand />
+        <EnvBadge runtime={runtime} />
       </div>
+      <nav className="side-nav" aria-label="Main">
+        {MAIN.map((item) => (
+          <SideLink key={item.href} item={item} pathname={pathname} />
+        ))}
+        <p className="side-nav-label">More</p>
+        {MORE.map((item) => (
+          <SideLink key={item.href} item={item} pathname={pathname} />
+        ))}
+      </nav>
+      <div className="sidebar-foot">
+        <div className="sidebar-tools">
+          <span className="faint" style={{ fontSize: "0.8rem" }}>
+            Theme
+          </span>
+          <ThemeToggle />
+        </div>
+        <PersonaSwitch current={user} />
+      </div>
+    </aside>
+  );
+}
+
+export function MobileBar({ user, runtime }: { user: User; runtime: Runtime }) {
+  return (
+    <header className="mobile-bar">
+      <Brand />
+      <EnvBadge runtime={runtime} />
+      <span className="spacer" />
+      <Link className="icon-button" href="/help" aria-label="Help" data-guide="help-link-mobile">
+        <LifeBuoy size={18} aria-hidden="true" />
+      </Link>
+      <ThemeToggle />
+      <PersonaSwitch current={user} />
     </header>
+  );
+}
+
+export function TabBar() {
+  const pathname = usePathname();
+  return (
+    <nav className="tabbar" aria-label="Main">
+      {MAIN.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Link key={item.href} className="tab" href={item.href} aria-current={isCurrent(pathname, item.href) ? "page" : undefined}>
+            <Icon size={20} aria-hidden="true" />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

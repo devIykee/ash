@@ -7,6 +7,7 @@ import { encryptPack, MAX_PLAINTEXT } from "@/crypto/pack";
 import { api, freshKey } from "@/client/api";
 import { storage } from "@/client/storage";
 import { presentError } from "./labels";
+import { useToast } from "./toast";
 import { addressPlaceholder, sampleAddress, type Runtime } from "./runtime";
 
 type Source = { kind: "text" } | { kind: "file"; name: string; bytes: Uint8Array };
@@ -17,6 +18,7 @@ function sizeLabel(bytes: number): string {
 
 export function OfferForm({ runtime }: { runtime: Runtime }) {
   const router = useRouter();
+  const toast = useToast();
   const fixture = sampleAddress(runtime);
   const [title, setTitle] = useState("Field notes");
   const [description, setDescription] = useState("A small encrypted file. The key stays in this browser.");
@@ -70,6 +72,7 @@ export function OfferForm({ runtime }: { runtime: Runtime }) {
       });
       // Storage can be blocked. The offer page then explains how to keep the key.
       storage.set(`ash-content-key:${created.offer.id}`, bytesToHex(encrypted.key));
+      toast("File encrypted and published.");
       router.push(`/commerce/offers/${created.offer.id}`);
       router.refresh();
     } catch (caught) {

@@ -5,12 +5,16 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import { Shell } from "@/components/shell";
 import { currentActor } from "@/server/current";
 import { runtime } from "@/server/runtime";
+import { THEME_SCRIPT } from "@/components/theme-script";
 import "./globals.css";
 
 const description = "Pay someone, send a locked file, or show one payment to a reviewer. They only see that.";
 
 export const viewport: Viewport = {
-  themeColor: "#f6f3ec",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f3ec" },
+    { media: "(prefers-color-scheme: dark)", color: "#131210" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
@@ -34,7 +38,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const actor = await currentActor();
   const user = actor ? { id: actor.user.id, name: actor.user.name, role: actor.user.role } : null;
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <Shell user={user} runtime={runtime()}>
           {children}

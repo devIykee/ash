@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { recordLabel } from "@/components/labels";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -5,6 +6,7 @@ import { ExchangeDesk } from "@/components/exchange-desk";
 import { GuideStart } from "@/components/guide-provider";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { Stepper } from "@/components/stepper";
 import { AshError } from "@/domain/errors";
 import { DISCLOSURES } from "@/domain/types";
 import { paymentModeLabel, stateLabel } from "@/components/labels";
@@ -15,6 +17,20 @@ import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
 
 export const metadata = { title: "Exchange" };
+
+const EXCHANGE_STEPS = [
+  { label: "Purchase started", hint: "Buyer key saved" },
+  { label: "Seller allows delivery", hint: "Key parts sealed" },
+  { label: "Buyer pays", hint: "Payment accepted" },
+  { label: "File opened", hint: "In the buyer's browser" },
+];
+
+function exchangeStep(state: string): number {
+  if (state === "awaiting_seller") return 1;
+  if (state === "awaiting_payment" || state === "payment_observed") return 2;
+  if (state === "payment_verified" || state === "delivery_failed") return 3;
+  return 4;
+}
 
 export default async function ExchangePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,6 +53,7 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           lede="The sender allows delivery, then the buyer pays. Opening the file happens in this browser."
           actions={<GuideStart id="delivery">If delivery fails</GuideStart>}
         />
+        <Stepper steps={EXCHANGE_STEPS} current={exchangeStep(detail.operation.state)} failed={detail.operation.state === "delivery_failed"} />
         <StatusPill value={detail.operation.state} />
         <p className="banner">{DISCLOSURES.escrow}</p>
         {payment ? (
@@ -60,7 +77,7 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           payTo={offer.payTo}
           fileName={offer.fileName}
         />
-        <Link href={`/operations/${id}`}>Open the activity record</Link>
+        <Link className="link-arrow" href={`/operations/${id}`}>Open the activity record <ArrowRight size={15} aria-hidden="true" /></Link>
       </div>
     );
   } catch (error) {

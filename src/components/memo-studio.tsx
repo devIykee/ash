@@ -44,13 +44,21 @@ export function MemoStudio() {
         <textarea value={memo} onChange={(event) => setMemo(event.target.value)} />
         <span className="field-hint">This text stays in the browser unless you later choose to put it on a receipt.</span>
       </label>
-      <div data-guide="memo-findings">
-      {result.findings.length === 0 ? <p className="muted">No pattern matched. That is not proof the memo is safe.</p> : null}
+      <div data-guide="memo-findings" className="stack" style={{ gap: "0.6rem" }}>
+      {result.findings.length === 0 ? <p className="banner ok">No pattern matched. That is not proof the memo is safe.</p> : null}
+      {result.findings.length > 0 ? (
+        <p className="muted">
+          {result.findings.length} {result.findings.length === 1 ? "thing" : "things"} to review, {dismissed.length} dismissed.
+        </p>
+      ) : null}
       {result.findings.map((finding) => (
         <article className="finding" data-severity={finding.severity} key={finding.id}>
-          <h3>
-            {finding.ruleId} · {finding.severity}
-          </h3>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h3 style={{ textTransform: "capitalize" }}>{finding.ruleId.replaceAll("_", " ")}</h3>
+            <span className="severity" data-severity={finding.severity}>
+              {finding.severity} risk
+            </span>
+          </div>
           <p className="mono">{finding.excerpt}</p>
           <p>{finding.reason}</p>
           <label>

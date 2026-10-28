@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BuyButton } from "@/components/buy-button";
@@ -48,7 +49,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <BuyButton offerId={id} disabled={!actor} title={offer.title} price={price} />
         )}
         {!actor ? <p className="muted">Sign in as Jules Okonkwo before starting a purchase. Starting a purchase does not pay.</p> : null}
-        <Link href="/commerce">Back to offers</Link>
+        <Link className="link-arrow" href="/commerce"><ArrowLeft size={15} aria-hidden="true" /> Back to offers</Link>
       </div>
     );
   } catch (error) {

@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { AgentForm, PaidApiDemo, RevokeAgent } from "@/components/agent-desk";
 import { GuideStart } from "@/components/guide-provider";
@@ -48,7 +49,7 @@ export default async function AgentsPage() {
           </article>
         ))}
       </div>
-      <Link href="/docs/AGENT_API">Agent API reference</Link>
+      <Link className="link-arrow" href="/docs/AGENT_API">Agent API reference <ArrowRight size={15} aria-hidden="true" /></Link>
     </div>
   );
 }

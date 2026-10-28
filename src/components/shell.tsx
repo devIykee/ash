@@ -3,35 +3,42 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { GuideProvider } from "./guide-provider";
-import { AppHeader } from "./nav";
+import { MobileBar, Sidebar, TabBar } from "./nav";
 import { NavProgress } from "./nav-progress";
 import type { Runtime } from "./runtime";
+import { ToastProvider } from "./toast";
 
 export function Shell({ user, runtime, children }: { user: { id: string; name: string; role: string } | null; runtime: Runtime; children: ReactNode }) {
   const pathname = usePathname();
   if (pathname === "/") {
     return (
-      <>
+      <ToastProvider>
         <NavProgress />
         <a className="skip" href="#content">
           Skip to content
         </a>
         {children}
-      </>
+      </ToastProvider>
     );
   }
   return (
-    <GuideProvider>
-      <div className="app-frame">
+    <ToastProvider>
+      <GuideProvider>
+        <NavProgress />
         <a className="skip" href="#content">
           Skip to content
         </a>
-        <NavProgress />
-        <AppHeader user={user} runtime={runtime} />
-        <main className={pathname.startsWith("/docs") ? "main wide" : "main"} id="content">
-          {children}
-        </main>
-      </div>
-    </GuideProvider>
+        <div className="app">
+          <Sidebar user={user} runtime={runtime} />
+          <div className="app-body">
+            <MobileBar user={user} runtime={runtime} />
+            <main className={pathname.startsWith("/docs") ? "main wide" : "main"} id="content">
+              {children}
+            </main>
+          </div>
+        </div>
+        <TabBar />
+      </GuideProvider>
+    </ToastProvider>
   );
 }

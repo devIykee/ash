@@ -1,3 +1,5 @@
+import { ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { GuideStart } from "@/components/guide-provider";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -87,7 +89,7 @@ export default async function SubscriptionsPage() {
                   payTo={plan?.payTo}
                 />
               ) : null}
-              <a href={`/operations/${sub.id}`}>Open the activity record</a>
+              <Link className="link-arrow" href={`/operations/${sub.id}`}>Open the activity record <ArrowRight size={15} aria-hidden="true" /></Link>
             </article>
             );
           })

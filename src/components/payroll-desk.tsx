@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "./toast";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/client/api";
@@ -60,6 +61,7 @@ export function PayrollDesk({
   walletUri?: string | null;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState<"send" | "cancel" | null>(null);
@@ -70,6 +72,17 @@ export function PayrollDesk({
     try {
       await api(path, { body: { expectedVersion: version, ...extra } });
       setConfirm(null);
+      toast(
+        path.endsWith("/authorize")
+          ? "Run approved. Record the payments next."
+          : path.endsWith("/execute")
+            ? "Payments recorded."
+            : path.endsWith("/record")
+              ? "Transaction recorded on the line."
+              : path.endsWith("/retry")
+                ? "Line retried."
+                : "Run cancelled.",
+      );
       router.refresh();
     } catch (caught) {
       setError(presentError(caught, "We couldn't update this payment run. Reload it before trying again."));
