@@ -8,9 +8,12 @@ import { decryptPack, type AshPack } from "@/crypto/pack";
 import { combineShares, shareFromJson, shareToJson, splitSecret } from "@/crypto/shamir";
 import { zatoshiToZec } from "@/domain/money";
 import { api, freshKey } from "@/client/api";
+import { storage } from "@/client/storage";
 import { ConfirmDialog } from "./confirm-dialog";
 import { HelpNote } from "./help-note";
 import { presentError } from "./labels";
+import { validTxId, WalletStep } from "./wallet-step";
+import { sha256Hex } from "@/crypto/pack";
 
 type Desk = {
   id: string;
@@ -22,6 +25,9 @@ type Desk = {
   buyerPublicKey?: string;
   releaseReady: boolean;
   practice: boolean;
+  walletUri?: string | null;
+  payTo?: string | null;
+  fileName?: string | null;
 };
 
 export function ExchangeDesk(props: Desk) {
@@ -31,6 +37,7 @@ export function ExchangeDesk(props: Desk) {
   const [pastedKey, setPastedKey] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState<"release" | "pay" | "fail" | null>(null);
+  const [txId, setTxId] = useState("");
 
   async function run(work: () => Promise<void>) {
     setPending(true);
@@ -47,13 +54,14 @@ export function ExchangeDesk(props: Desk) {
   }
 
   function contentKey(): Uint8Array {
-    const stored = localStorage.getItem(`ash-content-key:${props.offerId}`) || pastedKey.trim();
+    const saved = storage.get(`ash-content-key:${props.offerId}`);
+    const stored = pastedKey.trim() || saved || "";
     if (!/^[0-9a-f]{64}$/.test(stored)) throw new Error("Paste the file key saved when the offer was published. It is 64 hexadecimal characters.");
     return hexToBytes(stored);
   }
 
   function deviceKey(): string {
-    const stored = localStorage.getItem("ash-device-private");
+    const stored = storage.get("ash-device-private");
     if (!stored) throw new Error("This browser has no encryption key. Start the purchase again from the same browser.");
     return stored;
   }
@@ -73,7 +81,7 @@ export function ExchangeDesk(props: Desk) {
 
   async function pay() {
     await api(`/api/ash/exchanges/${props.id}/pay`, {
-      body: { expectedVersion: props.version },
+      body: { expectedVersion: props.version, txId: props.practice ? undefined : txId },
       idempotencyKey: freshKey("pay"),
     });
   }
@@ -107,15 +115,19 @@ export function ExchangeDesk(props: Desk) {
     }
     if (!pack.pack) throw new Error("The encrypted package is not available.");
     const plain = decryptPack(pack.pack, key);
-    const hashOk = pack.plaintextSha256.length === 64;
+    if (sha256Hex(plain) !== pack.plaintextSha256) {
+      throw new Error("The opened file does not match the published fingerprint. It was not saved. Report a failed delivery.");
+    }
     const blob = new Blob([Uint8Array.from(plain)]);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "ash-delivery.bin";
+    anchor.download = props.fileName || "ash-delivery.bin";
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
-    setInfo(hashOk ? "Opened in this browser and saved as a download. Compare the file with the published fingerprint if you need to check it." : "Downloaded.");
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setInfo("Opened in this browser and saved as a download. It matches the published fingerprint.");
   }
 
   return (
@@ -137,10 +149,27 @@ export function ExchangeDesk(props: Desk) {
           </button>
         </div>
       ) : null}
-      {props.role === "buyer" && (props.state === "awaiting_payment" || props.state === "payment_observed") ? (
-        <button type="button" disabled={pending} data-guide="exchange-pay" onClick={() => setConfirm("pay")}>
-          {props.practice ? "Review practice payment" : "Review payment"}
-        </button>
+      {props.role === "buyer" && props.state === "awaiting_seller" ? (
+        <p className="banner">Waiting for the seller to allow delivery. You pay after that. Nothing has been charged.</p>
+      ) : null}
+      {props.role === "seller" && ["awaiting_payment", "payment_observed"].includes(props.state) ? (
+        <p className="banner">Delivery is allowed. The buyer pays next. The file stays locked until ASH accepts the payment.</p>
+      ) : null}
+      {props.role === "buyer" && props.state === "payment_observed" ? (
+        <p className="banner">
+          A Zcash node sees your transaction. ASH cannot see a shielded amount or recipient, so the file stays locked. The seller can confirm the payment in their wallet.
+        </p>
+      ) : null}
+      {props.role === "buyer" && props.state === "awaiting_payment" ? (
+        <div className="stack" data-guide="exchange-pay">
+          {props.practice ? null : (
+            <WalletStep uri={props.walletUri} address={props.payTo} amountZec={zatoshiToZec(BigInt(props.priceZatoshi))} txId={txId} onTxId={setTxId} />
+          )}
+          {!props.practice && !props.payTo ? <p className="alert">This offer has no receiving address, so it cannot be paid from a wallet.</p> : null}
+          <button type="button" disabled={pending || (!props.practice && !validTxId(txId))} onClick={() => setConfirm("pay")}>
+            {props.practice ? "Review practice payment" : "Record my payment"}
+          </button>
+        </div>
       ) : null}
       {props.role === "buyer" && ["payment_verified", "delivered", "completed", "recovered"].includes(props.state) ? (
         <button type="button" disabled={pending} data-guide="exchange-download" onClick={() => run(() => download("release"))}>
@@ -177,9 +206,9 @@ export function ExchangeDesk(props: Desk) {
         body={
           props.practice
             ? `This records a practice payment of ${zatoshiToZec(BigInt(props.priceZatoshi))} ZEC. It is not broadcast. The file stays locked until ASH accepts the payment.`
-            : "ASH will try the payment check. In network-check mode a practice payment is refused, and this button does not build a transaction."
+            : `ASH will ask a Zcash node about transaction ${txId.slice(0, 10)}…. Seeing it does not prove the amount, so the file stays locked until the payment is accepted.`
         }
-        confirmLabel={props.practice ? "Record practice payment" : "Continue"}
+        confirmLabel={props.practice ? "Record practice payment" : "Look up transaction"}
         pending={pending}
         onClose={() => setConfirm(null)}
         onConfirm={() => run(pay)}

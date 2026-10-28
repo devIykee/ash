@@ -7,6 +7,7 @@ import { zatoshiToZec } from "@/domain/money";
 import { encodePaymentSignature, parsePaymentRequired } from "@sdk";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
+import { validTxId, WalletStep } from "./wallet-step";
 
 export function AgentForm() {
   const router = useRouter();
@@ -114,6 +115,7 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [offer, setOffer] = useState<{ challengeId: string; network: string; amount: string; payTo: string } | null>(null);
+  const [txId, setTxId] = useState("");
 
   async function requestNote() {
     setError("");
@@ -121,7 +123,10 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
     setPending(true);
     try {
       const first = await fetch("/api/v1/paid/research");
-      if (first.status !== 402) throw new Error(`The service did not ask for payment. It returned ${first.status}.`);
+      if (first.status !== 402) {
+        const body = (await first.json().catch(() => null)) as { error?: { message?: string } } | null;
+        throw new Error(body?.error?.message || `The service did not ask for payment. It returned ${first.status}.`);
+      }
       const challenge = parsePaymentRequired(first.headers.get("payment-required"));
       const accept = challenge.accepts[0];
       setOffer({
@@ -142,7 +147,17 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
     setPending(true);
     setError("");
     try {
-      const paid = await api<{ paymentRef: string }>(`/api/ash/challenges/${offer.challengeId}/pay`, { method: "POST", body: {} });
+      const paid = await api<{ paymentRef: string | null; status: string; reason: string | null }>(`/api/ash/challenges/${offer.challengeId}/pay`, {
+        method: "POST",
+        body: practice ? {} : { txId },
+      });
+      if (!paid.paymentRef) {
+        setOffer(null);
+        setTxId("");
+        setOutput("");
+        setError("A Zcash node sees this transaction, but ASH cannot see a shielded amount, so the note was not released.");
+        return;
+      }
       const second = await fetch("/api/v1/paid/research", {
         headers: {
           "payment-signature": encodePaymentSignature({
@@ -177,14 +192,24 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
         body={
           practice
             ? `The note costs ${offer ? zatoshiToZec(BigInt(offer.amount)) : ""} ZEC. This records a practice payment for this request only. It is not broadcast, and the reference works once.`
-            : "ASH will try the payment check for this request. A practice payment is refused in network-check mode."
+            : `The note costs ${offer ? zatoshiToZec(BigInt(offer.amount)) : ""} ZEC. Pay it from your wallet, then paste the transaction id.`
         }
-        confirmLabel={practice ? "Record practice payment" : "Continue"}
+        confirmLabel={practice ? "Record practice payment" : "Look up transaction"}
+        confirmDisabled={!practice && !validTxId(txId)}
         pending={pending}
         onClose={() => setOffer(null)}
         onConfirm={pay}
       >
-        {offer ? <p className="mono">{offer.payTo}</p> : null}
+        {offer && practice ? <p className="mono address-line">{offer.payTo}</p> : null}
+        {offer && !practice ? (
+          <WalletStep
+            uri={`zcash:${offer.payTo}?amount=${zatoshiToZec(BigInt(offer.amount))}`}
+            address={offer.payTo}
+            amountZec={zatoshiToZec(BigInt(offer.amount))}
+            txId={txId}
+            onTxId={setTxId}
+          />
+        ) : null}
       </ConfirmDialog>
     </div>
   );

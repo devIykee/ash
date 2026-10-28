@@ -2,10 +2,9 @@ import { AshError } from "@/domain/errors";
 import { newId, nowIso } from "@/domain/ids";
 import { paymentSatisfies } from "@/domain/payment";
 import { DISCLOSURES, type OperationRecord } from "@/domain/types";
-import { config } from "@/server/config";
-import { assertShieldedDestination } from "@/zcash/address";
+import { config, payToStatus } from "@/server/config";
 import type { Tx } from "@/store/types";
-import { assertScope, mustGet, settleSimulated, type Actor } from "./common";
+import { assertScope, mustGet, settleObserved, settleSimulated, type Actor } from "./common";
 import { createOperation, saveOperation } from "./events";
 
 export type ChallengeData = {
@@ -57,7 +56,8 @@ export function paymentRequiredDocument(challenge: ChallengeData, origin: string
 
 export async function issueChallenge(tx: Tx, origin: string): Promise<{ status: number; body: ReturnType<typeof paymentRequiredDocument>; headers: Record<string, string> }> {
   const cfg = config();
-  assertShieldedDestination(cfg.payTo, cfg.network);
+  const payTo = payToStatus(cfg);
+  if (!payTo.ok) throw new AshError("not_configured", payTo.reason, 503);
   const id = newId("chal");
   const operationId = newId("op");
   const challenge: ChallengeData = {
@@ -94,7 +94,7 @@ export async function issueChallenge(tx: Tx, origin: string): Promise<{ status: 
   };
 }
 
-export async function payChallenge(tx: Tx, actor: Actor, id: string) {
+export async function payChallenge(tx: Tx, actor: Actor, id: string, input: { txId?: string } = {}) {
   assertScope(actor, "pay");
   const doc = await mustGet<ChallengeData>(tx, "challenge", id);
   if (doc.data.status !== "open") throw new AshError("invalid_state", "This challenge is no longer payable.", 409);
@@ -102,14 +102,25 @@ export async function payChallenge(tx: Tx, actor: Actor, id: string) {
     await tx.put("challenge", id, { ...doc.data, status: "expired" }, doc.version);
     throw new AshError("challenge_expired", "This payment challenge has expired. Request the resource again.", 410);
   }
-  const payment = await settleSimulated(tx, actor, {
-    idempotencyKey: `challenge:${id}`,
-    amountZatoshi: doc.data.amountZatoshi,
-    feeZatoshi: "0",
-  });
   const cfg = config();
-  if (!paymentSatisfies(payment, cfg.allowSimulated)) {
-    throw new AshError("payment_unverified", "The payment is not sufficient to retry the request.", 402);
+  if (!cfg.allowSimulated && !input.txId) {
+    throw new AshError("txid_required", "Pay the address in the challenge from a wallet, then send the transaction id.", 400);
+  }
+  const payment = input.txId
+    ? await settleObserved(tx, {
+        idempotencyKey: `challenge:${id}`,
+        txId: input.txId,
+        amountZatoshi: doc.data.amountZatoshi,
+        feeZatoshi: "0",
+      })
+    : await settleSimulated(tx, actor, {
+        idempotencyKey: `challenge:${id}`,
+        amountZatoshi: doc.data.amountZatoshi,
+        feeZatoshi: "0",
+      });
+  const satisfied = paymentSatisfies(payment, cfg.allowSimulated);
+  if (!satisfied && payment.status !== "observed") {
+    throw new AshError("payment_unverified", payment.reason || "The payment is not sufficient to retry the request.", 402);
   }
   const operation = await mustGet<OperationRecord>(tx, "operation", doc.data.operationId);
   if (!operation.data.participantIds.includes(actor.user.id)) {
@@ -118,14 +129,28 @@ export async function payChallenge(tx: Tx, actor: Actor, id: string) {
   await saveOperation(
     tx,
     operation,
-    { ...operation.data, state: "payment_verified", payment, access: { kind: "api", entitled: false, restricted: true, note: "Paid. The resource runs only on the retry." } },
+    {
+      ...operation.data,
+      state: satisfied ? "payment_verified" : "payment_observed",
+      payment,
+      access: {
+        kind: "api",
+        entitled: false,
+        restricted: true,
+        note: satisfied ? "Paid. The resource runs only on the retry." : payment.reason || DISCLOSURES.observed,
+      },
+    },
     "payment_recorded",
     payment.mode,
     payment.txId,
   );
+  if (!satisfied) {
+    // Observation alone never unlocks the resource, so no payment reference is issued.
+    return { paymentRef: null, status: payment.status, reason: payment.reason, challengeId: id, resource: doc.data.resource };
+  }
   const fresh = await mustGet<ChallengeData>(tx, "challenge", id);
   await tx.put("challenge", id, { ...fresh.data, paymentRef: payment.idempotencyKey }, fresh.version);
-  return { paymentRef: payment.idempotencyKey, challengeId: id, resource: doc.data.resource };
+  return { paymentRef: payment.idempotencyKey, status: payment.status, reason: null, challengeId: id, resource: doc.data.resource };
 }
 
 export async function fulfillChallenge(tx: Tx, header: string | null, requestPath: string) {

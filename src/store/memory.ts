@@ -9,10 +9,17 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+function readOnly(): never {
+  throw new AshError("internal", "A read-only view tried to write.", 500);
+}
+
 class MemoryTx implements Tx {
+  dirty = false;
+
   constructor(
     private docs: Map<string, Row>,
     private eventLog: AshEvent[],
+    private readonlyView = false,
   ) {}
 
   private key(kind: string, id: string): string {
@@ -36,6 +43,8 @@ class MemoryTx implements Tx {
   }
 
   async put<T>(kind: string, id: string, data: T, expectedVersion: number | null): Promise<Doc<T>> {
+    if (this.readonlyView) readOnly();
+    this.dirty = true;
     const key = this.key(kind, id);
     const current = this.docs.get(key);
     if (expectedVersion === null) {
@@ -52,6 +61,8 @@ class MemoryTx implements Tx {
   }
 
   async appendEvent(event: AshEvent): Promise<void> {
+    if (this.readonlyView) readOnly();
+    this.dirty = true;
     this.eventLog.push(clone(event));
   }
 
@@ -65,6 +76,7 @@ export class MemoryStore implements Store {
   protected docs = new Map<string, Row>();
   protected eventLog: AshEvent[] = [];
   private queue: Promise<unknown> = Promise.resolve();
+  private seeded = false;
 
   transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     const run = async () => {
@@ -74,6 +86,8 @@ export class MemoryStore implements Store {
       const tx = new MemoryTx(docs, events);
       await ensureSeed(tx);
       const result = await fn(tx);
+      this.seeded = true;
+      if (!tx.dirty) return result;
       this.docs = docs;
       this.eventLog = events;
       await this.persist();
@@ -87,11 +101,21 @@ export class MemoryStore implements Store {
     return next;
   }
 
+  async read<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    // Committed state is swapped in whole, so reading it directly is consistent.
+    if (!this.seeded) return this.transaction(fn);
+    return fn(new MemoryTx(this.docs, this.eventLog, true));
+  }
+
   protected async persist(): Promise<void> {}
 }
 
 export class UnconfiguredStore implements Store {
   readonly kind = "unconfigured" as const;
+
+  read<T>(): Promise<T> {
+    return this.transaction<T>();
+  }
 
   transaction<T>(): Promise<T> {
     return Promise.reject(

@@ -25,12 +25,21 @@ create index if not exists events_operation_idx on events (operation_id, created
 type Sql = postgres.Sql;
 
 class PgTx implements Tx {
-  constructor(private sql: Sql) {}
+  constructor(
+    private sql: Sql,
+    private readonlyView = false,
+  ) {}
+
+  private guard(): void {
+    if (this.readonlyView) throw new AshError("internal", "A read-only view tried to write.", 500);
+  }
 
   async get<T>(kind: string, id: string): Promise<Doc<T> | null> {
-    const rows = await this.sql<{ version: number; data: T }[]>`
-      select version, data from documents where kind = ${kind} and id = ${id} for update
-    `;
+    const rows = this.readonlyView
+      ? await this.sql<{ version: number; data: T }[]>`select version, data from documents where kind = ${kind} and id = ${id}`
+      : await this.sql<{ version: number; data: T }[]>`
+          select version, data from documents where kind = ${kind} and id = ${id} for update
+        `;
     if (!rows[0]) return null;
     return { id, version: rows[0].version, data: rows[0].data };
   }
@@ -43,6 +52,7 @@ class PgTx implements Tx {
   }
 
   async put<T>(kind: string, id: string, data: T, expectedVersion: number | null): Promise<Doc<T>> {
+    this.guard();
     if (expectedVersion === null) {
       const rows = await this.sql<{ version: number }[]>`
         insert into documents (kind, id, version, data)
@@ -64,6 +74,7 @@ class PgTx implements Tx {
   }
 
   async appendEvent(event: AshEvent): Promise<void> {
+    this.guard();
     await this.sql`
       insert into events (id, operation_id, data)
       values (${event.id}, ${event.operationId}, ${this.sql.json(event as unknown as postgres.JSONValue)})
@@ -84,21 +95,35 @@ export class PostgresStore implements Store {
   private migrated = false;
 
   constructor(url: string) {
-    this.sql = postgres(url, { max: 4 });
+    this.sql = postgres(url, { max: 4, idle_timeout: 20, connect_timeout: 10 });
   }
 
-  async migrate(): Promise<void> {
-    if (this.migrated) return;
-    await this.sql.unsafe(MIGRATION);
-    this.migrated = true;
+  private migrating: Promise<void> | null = null;
+
+  // Runs the schema and persona seed once per process, not inside every request.
+  migrate(): Promise<void> {
+    if (this.migrated) return Promise.resolve();
+    if (!this.migrating) {
+      this.migrating = (async () => {
+        await this.sql.unsafe(MIGRATION);
+        await this.sql.begin(async (sql) => {
+          await ensureSeed(new PgTx(sql as unknown as Sql));
+        });
+        this.migrated = true;
+      })().finally(() => {
+        this.migrating = null;
+      });
+    }
+    return this.migrating;
   }
 
   async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     await this.migrate();
-    return this.sql.begin(async (sql) => {
-      const tx = new PgTx(sql as unknown as Sql);
-      await ensureSeed(tx);
-      return fn(tx);
-    }) as Promise<T>;
+    return this.sql.begin(async (sql) => fn(new PgTx(sql as unknown as Sql))) as Promise<T>;
+  }
+
+  async read<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    await this.migrate();
+    return fn(new PgTx(this.sql, true));
   }
 }

@@ -12,7 +12,7 @@ export const metadata = { title: "Agents" };
 
 export default async function AgentsPage() {
   const actor = await requireActor();
-  const tokens = actor.user.role === "operator" ? await getStore().transaction((tx) => listAgentTokens(tx, actor)) : [];
+  const tokens = actor.user.role === "operator" ? await getStore().read((tx) => listAgentTokens(tx, actor)) : [];
   const practice = config().allowSimulated;
   return (
     <div className="stack">

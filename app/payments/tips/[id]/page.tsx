@@ -13,22 +13,30 @@ export const metadata = { title: "Tip" };
 export default async function TipPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const tip = await getStore().transaction((tx) => getTip(tx, id));
+    const tip = await getStore().read((tx) => getTip(tx, id));
     const practice = config().allowSimulated;
     return (
       <div className="stack">
         <PageHeader eyebrow={tip.network === "testnet" ? "Zcash testnet" : "Zcash mainnet"} title={tip.title} lede={tip.statement} />
-        <p className="mono">{tip.address}</p>
-        <p>
-          <a href={tip.uri}>Open a wallet request for {tip.amountZec} ZEC</a>
-        </p>
-        <p className="muted">Opening the wallet request does not pay, and ASH has not seen a transaction yet.</p>
-        {tip.disclosures.map((item) => (
-          <p className="banner" key={item}>
-            {item}
-          </p>
-        ))}
-        <TipPay id={id} address={tip.address} suggested={tip.suggestedZatoshi.map((amount) => zatoshiToZec(BigInt(amount)))} practice={practice} />
+        <section className="panel stack">
+          <p className="kicker">Tips go to</p>
+          <p className="mono address-line">{tip.address}</p>
+          {practice ? (
+            <p>
+              <a href={tip.uri}>Open a wallet request for {tip.amountZec} ZEC</a>
+              <span className="muted"> · Opening it does not pay.</span>
+            </p>
+          ) : null}
+        </section>
+        <details className="notes quiet-notes">
+          <summary>What a receipt here proves</summary>
+          <ul>
+            {tip.disclosures.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </details>
+        <TipPay id={id} address={tip.address} suggested={tip.suggestedZatoshi.map((amount) => zatoshiToZec(BigInt(amount)))} uri={tip.uri} practice={practice} />
         <Link href="/payments/tips">All tip pages</Link>
       </div>
     );

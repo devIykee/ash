@@ -34,6 +34,7 @@ export async function createAgentToken(
     createdAt: nowIso(),
   };
   await tx.put("agent_token", record.id, record, null);
+  await tx.put("agent_token_hash", record.secretHash, { tokenId: record.id }, null);
   return {
     token,
     agent: {

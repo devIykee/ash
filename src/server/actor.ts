@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { AshError } from "@/domain/errors";
-import type { User } from "@/domain/types";
+import { PERSONAS, type User } from "@/domain/types";
 import type { Tx } from "@/store/types";
 import { mustGet, type Actor, type AgentToken } from "@/services/common";
 import { readCookie, readSession } from "./auth";
@@ -17,8 +17,14 @@ async function actorFromToken(tx: Tx, token: string): Promise<Actor> {
     throw new AshError("unauthorized", "Agent token is not valid.", 401);
   }
   const hash = bytesToHex(sha256(utf8ToBytes(token)));
-  const rows = await tx.list<AgentToken>("agent_token");
-  const found = rows.find((row) => sameHex(row.data.secretHash, hash));
+  const indexed = await tx.get<{ tokenId: string }>("agent_token_hash", hash);
+  let found = indexed ? await tx.get<AgentToken>("agent_token", indexed.data.tokenId) : null;
+  if (found && !sameHex(found.data.secretHash, hash)) found = null;
+  if (!found) {
+    // Tokens minted before the hash index existed.
+    const rows = await tx.list<AgentToken>("agent_token");
+    found = rows.find((row) => sameHex(row.data.secretHash, hash)) ?? null;
+  }
   if (!found) throw new AshError("unauthorized", "Agent token is not valid.", 401);
   if (found.data.revokedAt) throw new AshError("forbidden", "This agent token has been revoked.", 403);
   const user = await mustGet<User>(tx, "user", found.data.ownerId);
@@ -36,7 +42,6 @@ export async function resolveActor(tx: Tx, req: Request): Promise<Actor | null> 
   if (!cookie) return null;
   const userId = readSession(cookie);
   if (!userId) return null;
-  const user = await tx.get<User>("user", userId);
-  if (!user) return null;
-  return { kind: "user", user: user.data };
+  const user = PERSONAS.find((persona) => persona.id === userId);
+  return user ? { kind: "user", user: { ...user } } : null;
 }

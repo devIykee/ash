@@ -1,3 +1,4 @@
+import { recordLabel } from "@/components/labels";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { GuideStart } from "@/components/guide-provider";
@@ -13,10 +14,10 @@ export const metadata = { title: "Exchange" };
 
 export default async function CommercePage() {
   const actor = await currentActor();
-  const offers = await getStore().transaction((tx) => listOffers(tx));
-  const exchanges = actor
-    ? (await getStore().transaction((tx) => listOperations(tx, actor))).filter((item) => item.type === "data_exchange")
-    : [];
+  const { offers, exchanges } = await getStore().read(async (tx) => ({
+    offers: await listOffers(tx),
+    exchanges: actor ? (await listOperations(tx, actor)).filter((item) => item.type === "data_exchange") : [],
+  }));
   const canPublish = actor?.user.role === "creator" || actor?.user.role === "operator";
   return (
     <div className="stack">
@@ -74,7 +75,7 @@ export default async function CommercePage() {
           ) : (
             exchanges.map((item) => (
               <Link className="card" key={item.id} href={`/commerce/exchanges/${item.id}`}>
-                <h3>{item.label}</h3>
+                <h3>{recordLabel(item.label)}</h3>
                 <StatusPill value={item.state} />
               </Link>
             ))

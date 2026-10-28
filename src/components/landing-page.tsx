@@ -1,7 +1,15 @@
 import Link from "next/link";
+import type { Runtime } from "./runtime";
 import { SiteHeader } from "./site-header";
 
-export function LandingPage({ signedIn }: { signedIn: boolean }) {
+function previewLine(runtime: Runtime): string {
+  const network = runtime.network === "mainnet" ? "Zcash mainnet" : "Zcash testnet";
+  return runtime.practice
+    ? `Runs on ${network} settings with practice payments. Nothing is sent on the network.`
+    : `Runs on ${network}. You pay from your own wallet, and ASH looks up the transaction id.`;
+}
+
+export function LandingPage({ signedIn, runtime }: { signedIn: boolean; runtime: Runtime }) {
   return (
     <div className="site">
       <SiteHeader signedIn={signedIn} />
@@ -13,13 +21,13 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               <p className="lede">You can also send a locked file, or show one payment to a reviewer. They only see that.</p>
               <div className="row">
                 <Link className="button" href="/workspace">
-                  Open ASH
+                  {signedIn ? "Go to my workspace" : "Open ASH"}
                 </Link>
                 <a className="button quiet" href="#how">
                   How it works
                 </a>
               </div>
-              <p className="fine">This is a testnet preview. Practice payments are not sent on the network.</p>
+              <p className="fine">{previewLine(runtime)}</p>
             </div>
             <figure className="stage rise rise-late" aria-label="Example of a private payment. Not a real payment.">
               <figcaption className="kicker">Example only. Not a real payment.</figcaption>

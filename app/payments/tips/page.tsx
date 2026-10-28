@@ -9,7 +9,7 @@ export const metadata = { title: "Tips" };
 
 export default async function TipsPage() {
   const actor = await currentActor();
-  const tips = actor ? await getStore().transaction((tx) => listTips(tx, actor)) : [];
+  const tips = actor ? await getStore().read((tx) => listTips(tx, actor)) : [];
   const canPublish = actor?.user.role === "creator" || actor?.user.role === "operator";
   return (
     <div className="stack">

@@ -138,3 +138,14 @@ export function moduleHref(type: string, id: string): string {
   if (type === "api_request") return `/agents`;
   return `/operations/${id}`;
 }
+
+const LEGACY_LABELS: Record<string, string> = {
+  "ufvk grant": "Full viewing key disclosure",
+  "uivk grant": "Incoming viewing key disclosure",
+  "filtered_report grant": "Written summary for a reviewer",
+};
+
+// Records created before friendly names existed.
+export function recordLabel(label: string): string {
+  return LEGACY_LABELS[label] ?? label;
+}

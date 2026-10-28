@@ -18,7 +18,8 @@ const EDGES: Record<OperationType, Partial<Record<OperationState, readonly Opera
   },
   api_request: {
     draft: ["awaiting_payment", "expired", "cancelled"],
-    awaiting_payment: ["payment_verified", "expired", "cancelled"],
+    awaiting_payment: ["payment_observed", "payment_verified", "expired", "cancelled"],
+    payment_observed: ["payment_verified", "expired"],
     payment_verified: ["completed"],
   },
   data_exchange: {
@@ -37,7 +38,8 @@ const EDGES: Record<OperationType, Partial<Record<OperationState, readonly Opera
   },
   subscription: {
     draft: ["awaiting_payment", "cancelled"],
-    awaiting_payment: ["payment_verified", "cancelled", "expired"],
+    awaiting_payment: ["payment_observed", "payment_verified", "cancelled", "expired"],
+    payment_observed: ["payment_verified", "cancelled", "expired"],
     payment_verified: ["completed"],
     completed: ["grace", "cancelled", "expired"],
     grace: ["completed", "expired", "cancelled"],

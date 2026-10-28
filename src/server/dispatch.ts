@@ -31,6 +31,7 @@ import {
   getPayroll,
   listPayroll,
   payrollReport,
+  recordPayrollLine,
   retryPayrollLine,
 } from "@/services/payroll";
 import {
@@ -46,7 +47,7 @@ import { createTip, getReceipt, getTip, listTips, payTip } from "@/services/tips
 import { payChallenge } from "@/services/x402";
 import { resolveActor } from "./actor";
 import { clearSessionCookie, sessionCookie, signSession } from "./auth";
-import { config } from "./config";
+import { config, payToStatus } from "./config";
 import { assertSameOrigin, errorResponse, idempotencyKey, json, parseBody, readJson } from "./http";
 import { rateLimit } from "./rate-limit";
 import { getStore } from "./store";
@@ -54,6 +55,11 @@ import { getStore } from "./store";
 const personaId = z.enum(["user_avery", "user_noor", "user_jules", "user_sam"]);
 const versionBody = z.object({ expectedVersion: z.number().int().positive() }).strict();
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
+const txIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[0-9a-fA-F]{64}$/, "A Zcash transaction id is 64 hexadecimal characters.")
+  .transform((value) => value.toLowerCase());
 const sealedBox = z
   .object({
     v: z.literal(1),
@@ -78,9 +84,10 @@ function clientKey(req: Request): string {
 export function healthBody() {
   const cfg = config();
   const storeKind = getStore().kind;
+  const payTo = payToStatus(cfg);
   return {
     service: "ash",
-    status: cfg.usingDevSecrets || storeKind === "unconfigured" ? "degraded" : "ok",
+    status: cfg.usingDevSecrets || storeKind === "unconfigured" || !payTo.ok ? "degraded" : "ok",
     network: cfg.network,
     paymentMode: cfg.paymentMode,
     adapterMode: cfg.adapterMode,
@@ -88,7 +95,10 @@ export function healthBody() {
     requiredConfirmations: cfg.requiredConfirmations,
     usingDevSecrets: cfg.usingDevSecrets,
     store: storeKind,
-    payToIsFixture: cfg.payTo.includes("ztestsapling1qv2z2"),
+    payToConfigured: payTo.ok,
+    payToIsFixture: payTo.ok && payTo.fixture,
+    payToProblem: payTo.ok ? null : payTo.reason,
+    rpcConfigured: Boolean(cfg.rpcUrl),
     personas: PERSONAS.map((person) => ({ id: person.id, name: person.name, role: person.role })),
   };
 }
@@ -171,6 +181,13 @@ async function route(ctx: Ctx): Promise<Response> {
   }
   if (root === "payroll" && method === "POST" && id && action === "lines" && extra) {
     const lineAction = segments[4];
+    if (lineAction === "record") {
+      const recorded = parseBody(
+        z.object({ expectedVersion: z.number().int().positive(), txId: txIdSchema }).strict(),
+        await readJson(req),
+      );
+      return json(await recordPayrollLine(tx, requireActor(actor), id, extra, recorded.expectedVersion, recorded.txId));
+    }
     const body = parseBody(versionBody, await readJson(req));
     if (lineAction === "retry") return json(await retryPayrollLine(tx, requireActor(actor), id, extra, body.expectedVersion));
     if (lineAction === "cancel") return json(await cancelPayrollLine(tx, requireActor(actor), id, extra, body.expectedVersion));
@@ -199,7 +216,7 @@ async function route(ctx: Ctx): Promise<Response> {
           amountZec: z.string().max(20),
           memo: z.string().max(512).optional(),
           includeMemo: z.boolean().optional(),
-          txId: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+          txId: txIdSchema.optional(),
         })
         .strict(),
       await readJson(req),
@@ -212,7 +229,8 @@ async function route(ctx: Ctx): Promise<Response> {
   if (root === "receipts" && method === "GET" && id) return json(await getReceipt(tx, id));
 
   if (root === "challenges" && method === "POST" && id && action === "pay") {
-    return json(await payChallenge(tx, requireActor(actor), id));
+    const body = parseBody(z.object({ txId: txIdSchema.optional() }).strict(), await readJson(req));
+    return json(await payChallenge(tx, requireActor(actor), id, body));
   }
 
   if (root === "offers" && method === "POST" && !id) {
@@ -222,6 +240,8 @@ async function route(ctx: Ctx): Promise<Response> {
           title: z.string().trim().min(1).max(80),
           description: z.string().max(600),
           priceZec: z.string().max(20),
+          payTo: z.string().max(512).optional(),
+          fileName: z.string().max(200).optional(),
           plaintextSha256: hex64,
           pack: z
             .object({
@@ -280,7 +300,7 @@ async function route(ctx: Ctx): Promise<Response> {
       z
         .object({
           expectedVersion: z.number().int().positive(),
-          txId: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+          txId: txIdSchema.optional(),
         })
         .strict(),
       await readJson(req),
@@ -329,6 +349,7 @@ async function route(ctx: Ctx): Promise<Response> {
           title: z.string().trim().min(1).max(80),
           description: z.string().max(400),
           priceZec: z.string().max(20),
+          payTo: z.string().max(512).optional(),
           intervalDays: z.number().int().min(1).max(366),
           graceDays: z.number().int().min(0).max(30),
         })
@@ -343,8 +364,11 @@ async function route(ctx: Ctx): Promise<Response> {
     return json(await subscribe(tx, requireActor(actor), body.offerId, key), 201);
   }
   if (root === "subscriptions" && method === "POST" && id && action === "renew") {
-    const body = parseBody(versionBody, await readJson(req));
-    return json(await renewSubscription(tx, requireActor(actor), id, body.expectedVersion, key));
+    const body = parseBody(
+      z.object({ expectedVersion: z.number().int().positive(), txId: txIdSchema.optional() }).strict(),
+      await readJson(req),
+    );
+    return json(await renewSubscription(tx, requireActor(actor), id, body.expectedVersion, key, Date.now(), body.txId));
   }
   if (root === "subscriptions" && method === "POST" && id && action === "refresh") {
     return json(await refreshSubscription(tx, requireActor(actor), id));

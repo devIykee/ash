@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { generateX25519, publicFromPrivate } from "@/crypto/box";
 import { api, freshKey } from "@/client/api";
+import { storage } from "@/client/storage";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
 
@@ -17,11 +18,13 @@ export function BuyButton({ offerId, disabled, title, price }: { offerId: string
     setPending(true);
     setError("");
     try {
-      let privateKey = localStorage.getItem("ash-device-private");
+      let privateKey = storage.get("ash-device-private");
       if (!privateKey) {
         const created = generateX25519();
         privateKey = created.privateKey;
-        localStorage.setItem("ash-device-private", privateKey);
+        if (!storage.set("ash-device-private", privateKey)) {
+          throw new Error("This browser blocks site storage, so it cannot keep the key that opens the file. Use a normal window and try again.");
+        }
       }
       await api("/api/ash/keys", { body: { publicKey: publicFromPrivate(privateKey) } });
       const opened = await api<{ operation: { id: string } }>("/api/ash/exchanges", {
@@ -48,7 +51,7 @@ export function BuyButton({ offerId, disabled, title, price }: { offerId: string
       <ConfirmDialog
         open={confirm}
         title="Start this purchase?"
-        body={`You are opening an exchange for ${title} at ${price} ZEC. ASH will store an encryption address from this browser. Payment happens later, after the sender allows delivery.`}
+        body={`You are opening an exchange for ${title} at ${price}. ASH will store an encryption address from this browser. Payment happens later, after the sender allows delivery.`}
         confirmLabel="Open the exchange"
         pending={pending}
         onClose={() => setConfirm(false)}

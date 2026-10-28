@@ -2,6 +2,7 @@ import { GuideStart } from "@/components/guide-provider";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { TipForm } from "@/components/tip-desk";
 import { requireActor } from "@/server/current";
+import { runtime } from "@/server/runtime";
 
 export const metadata = { title: "New tip page" };
 
@@ -23,7 +24,7 @@ export default async function NewTipPage() {
           { title: "If payment is unclear", body: "No receipt is issued until ASH accepts the payment record." },
         ]}
       />
-      {allowed ? <TipForm /> : <p className="banner">Sign in as Noor Hale to publish a tip page.</p>}
+      {allowed ? <TipForm runtime={runtime()} /> : <p className="banner">Sign in as Noor Hale to publish a tip page.</p>}
     </div>
   );
 }

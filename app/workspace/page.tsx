@@ -1,3 +1,4 @@
+import { recordLabel } from "@/components/labels";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -6,6 +7,7 @@ import { TaskLauncher } from "@/components/task-launcher";
 import { typeLabel } from "@/components/labels";
 import { overview } from "@/services/overview";
 import { currentActor } from "@/server/current";
+import { runtime } from "@/server/runtime";
 import { getStore } from "@/server/store";
 
 export const metadata = { title: "Workspace" };
@@ -20,12 +22,16 @@ export default async function WorkspacePage() {
           title="What do you want to do?"
           lede="Pick a demo person in the account menu. No password. Avery pays people. Noor gets paid. Jules buys files. Sam reviews records."
         />
-        <p className="banner">Practice payments stay on this site. They are not sent on the network.</p>
+        <p className="banner">
+          {runtime().practice
+            ? "Practice payments stay on this site. They are not sent on the network."
+            : "You pay from your own wallet. ASH only looks up the transaction id you enter."}
+        </p>
         <TaskLauncher />
       </div>
     );
   }
-  const data = await getStore().transaction((tx) => overview(tx, actor));
+  const data = await getStore().read((tx) => overview(tx, actor));
   const attention = data.attention;
   const labelFor = (id: string) => data.cards.find((card) => card.id === id)?.label ?? "Open record";
   return (
@@ -35,11 +41,19 @@ export default async function WorkspacePage() {
         title={attention.length > 0 ? "Something needs you" : "Here is where things stand"}
         lede="Open a record when you need its amount and detail. This page does not invent balances."
       />
-      {data.warnings.map((warning) => (
-        <p className="banner" key={warning}>
-          {warning}
+      {data.problems.map((problem) => (
+        <p className="banner danger" key={problem}>
+          {problem}
         </p>
       ))}
+      <details className="notes">
+        <summary>About this deployment</summary>
+        <ul>
+          {data.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      </details>
       <section className="stack">
         <h2>Needs attention</h2>
         {attention.length === 0 ? (
@@ -49,7 +63,7 @@ export default async function WorkspacePage() {
             {attention.map((card) => (
               <Link className="card" key={card.id} href={`/operations/${card.id}`}>
                 <p className="kicker">{typeLabel(card.type)}</p>
-                <h3>{card.label}</h3>
+                <h3>{recordLabel(card.label)}</h3>
                 <StatusPill value={card.state} />
               </Link>
             ))}
@@ -91,7 +105,7 @@ export default async function WorkspacePage() {
             {data.cards.map((card) => (
               <Link className="card" key={card.id} href={`/operations/${card.id}`}>
                 <p className="kicker">{typeLabel(card.type)}</p>
-                <h3>{card.label}</h3>
+                <h3>{recordLabel(card.label)}</h3>
                 <StatusPill value={card.state} />
               </Link>
             ))}

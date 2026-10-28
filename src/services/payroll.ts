@@ -38,9 +38,8 @@ type LineInput = { label: string; address: string; amountZec: string };
 function deriveState(lines: PayrollLine[]): OperationState {
   const active = lines.filter((line) => line.state !== "cancelled");
   if (active.length === 0) return "cancelled";
-  if (active.some((line) => line.state === "invalid" || line.state === "ready")) return "failed";
+  if (active.some((line) => line.state === "invalid")) return "failed";
   if (active.every((line) => line.state === "verified")) return "completed";
-  if (active.every((line) => line.state === "failed")) return "failed";
   if (active.some((line) => line.state === "verified" || line.state === "observed")) return "partially_completed";
   return "failed";
 }
@@ -165,24 +164,11 @@ async function payLines(tx: Tx, actor: Actor, payroll: PayrollData, onlyLineId?:
       line.error = null;
     }
     const key = `${line.id}:${line.attempt}`;
-    const payment =
-      cfg.paymentMode === "chain"
-        ? await settleObserved(tx, {
-            idempotencyKey: key,
-            txId: line.txId || "0".repeat(64),
-            amountZatoshi: line.amountZatoshi,
-            feeZatoshi: line.feeZatoshi,
-          }).catch(() => null)
-        : await settleSimulated(tx, actor, {
-            idempotencyKey: key,
-            amountZatoshi: line.amountZatoshi,
-            feeZatoshi: line.feeZatoshi,
-          });
-    if (!payment) {
-      line.state = "failed";
-      line.error = "Payment adapter returned no result.";
-      continue;
-    }
+    const payment = await settleSimulated(tx, actor, {
+      idempotencyKey: key,
+      amountZatoshi: line.amountZatoshi,
+      feeZatoshi: line.feeZatoshi,
+    });
     line.txId = payment.txId;
     line.paymentMode = payment.mode;
     if (paymentSatisfies(payment, cfg.allowSimulated)) {
@@ -208,6 +194,9 @@ export async function executePayroll(tx: Tx, actor: Actor, id: string, expectedV
   if (!["authorized", "partially_completed", "failed"].includes(current.data.state)) {
     throw new AshError("invalid_state", "Authorize the run before executing it.", 409);
   }
+  if (!config().allowSimulated) {
+    throw new AshError("txid_required", "Pay each line from your wallet, then record its transaction id. ASH does not send payments.", 400);
+  }
   const payroll = await mustGet<PayrollData>(tx, "payroll", id);
   const executing = await saveOperation(tx, current, { ...current.data, state: "executing" }, "executing", "payment adapter started");
   const paid = await payLines(tx, actor, payroll.data);
@@ -227,6 +216,9 @@ export async function retryPayrollLine(tx: Tx, actor: Actor, id: string, lineId:
   const payroll = await mustGet<PayrollData>(tx, "payroll", id);
   const line = payroll.data.lines.find((item) => item.id === lineId);
   if (!line || line.state !== "failed") throw new AshError("invalid_state", "Only a failed line can be retried.", 409);
+  if (!config().allowSimulated) {
+    throw new AshError("txid_required", "Pay this line again from your wallet, then record the new transaction id.", 400);
+  }
   const started =
     current.data.state === "executing"
       ? current
@@ -237,6 +229,52 @@ export async function retryPayrollLine(tx: Tx, actor: Actor, id: string, lineId:
   await tx.put("payroll", id, paid, payroll.version);
   const saved = await saveOperation(tx, started, { ...started.data, state }, state, "line retried");
   return { version: saved.version, operation: saved.data, payroll: paid };
+}
+
+// Wallet-payment (chain) mode: the operator paid a line from a wallet and reports the transaction id.
+export async function recordPayrollLine(tx: Tx, actor: Actor, id: string, lineId: string, expectedVersion: number, txId: string) {
+  assertPerson(actor);
+  assertRole(actor, ["operator"]);
+  const current = await mustGet<OperationRecord>(tx, "operation", id);
+  if (current.version !== expectedVersion) throw new AshError("conflict", "The run changed. Reload it and try again.", 409);
+  if (current.data.initiatorId !== actor.user.id) throw new AshError("forbidden", "You cannot change this run.", 403);
+  if (!["authorized", "executing", "partially_completed", "failed"].includes(current.data.state)) {
+    throw new AshError("invalid_state", "Authorize the run before recording payments.", 409);
+  }
+  const payroll = await mustGet<PayrollData>(tx, "payroll", id);
+  const lines = payroll.data.lines.map((line) => ({ ...line }));
+  const line = lines.find((item) => item.id === lineId);
+  if (!line || !["ready", "failed"].includes(line.state)) {
+    throw new AshError("invalid_state", "Only a line that has not been recorded can take a transaction id.", 409);
+  }
+  if (line.state === "failed") line.attempt += 1;
+  const payment = await settleObserved(tx, {
+    idempotencyKey: `${line.id}:${line.attempt}:${txId}`,
+    txId,
+    amountZatoshi: line.amountZatoshi,
+    feeZatoshi: line.feeZatoshi,
+  });
+  line.txId = payment.txId;
+  line.paymentMode = payment.mode;
+  if (paymentSatisfies(payment, config().allowSimulated)) {
+    line.state = "verified";
+    line.error = null;
+  } else if (payment.status === "observed") {
+    line.state = "observed";
+    line.error = payment.reason;
+  } else {
+    line.state = "failed";
+    line.error = payment.reason || "The transaction was not observed.";
+  }
+  const started =
+    current.data.state === "executing"
+      ? current
+      : await saveOperation(tx, current, { ...current.data, state: "executing" }, "executing", "wallet payment recorded");
+  const state = deriveState(lines);
+  assertCompletable(lines, state);
+  await tx.put("payroll", id, { ...payroll.data, lines }, payroll.version);
+  const saved = await saveOperation(tx, started, { ...started.data, state }, state, "line recorded", payment.txId);
+  return { version: saved.version, operation: saved.data, payroll: { ...payroll.data, lines } };
 }
 
 export async function cancelPayrollLine(tx: Tx, actor: Actor, id: string, lineId: string, expectedVersion: number) {

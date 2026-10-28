@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "agent:demo": "tsx agents/demo-agent.ts"
+    "agent:demo": "tsx agents/demo-agent.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.2.7",

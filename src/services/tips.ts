@@ -140,6 +140,9 @@ export async function payTip(
     if (page.data.state !== "awaiting_payment") throw new AshError("invalid_state", "This tip page is not accepting payments.", 409);
     const amount = zecToZatoshi(input.amountZec);
     if (amount <= 0n) throw new AshError("invalid_amount", "Tip amount must be greater than zero.");
+    if (!cfg.allowSimulated && !input.txId) {
+      throw new AshError("txid_required", "Pay from a wallet with the request link, then enter the transaction id.", 400);
+    }
     const payer = actor ?? { kind: "user" as const, user: { id: "user_guest", name: "Guest", role: "buyer" as const, createdAt: "" } };
     const payment = input.txId
       ? await settleObserved(tx, {

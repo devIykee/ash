@@ -34,6 +34,11 @@ export class FileStore extends MemoryStore {
     return super.transaction(fn);
   }
 
+  override async read<T>(fn: (tx: import("./types").Tx) => Promise<T>): Promise<T> {
+    await this.loaded;
+    return super.read(fn);
+  }
+
   protected override async persist(): Promise<void> {
     await mkdir(path.dirname(this.filePath), { recursive: true });
     const snapshot: Snapshot = { docs: [...this.docs.entries()], events: this.eventLog };

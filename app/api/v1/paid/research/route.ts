@@ -14,7 +14,8 @@ function originOf(req: Request): string {
 
 export async function GET(req: Request): Promise<Response> {
   try {
-    rateLimit("paid-research");
+    const client = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+    rateLimit(`${client}:paid-research`);
     const header = req.headers.get("payment-signature");
     if (header) {
       const result = await getStore().transaction((tx) => fulfillChallenge(tx, header, "/api/v1/paid/research"));

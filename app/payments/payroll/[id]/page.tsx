@@ -7,6 +7,7 @@ import { AshError } from "@/domain/errors";
 import { zatoshiToZec } from "@/domain/money";
 import { getPayroll } from "@/services/payroll";
 import { config } from "@/server/config";
+import { buildZip321 } from "@/zcash/zip321";
 import { requireActor } from "@/server/current";
 import { getStore } from "@/server/store";
 
@@ -16,9 +17,18 @@ export default async function PayrollPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const actor = await requireActor();
   try {
-    const report = await getStore().transaction((tx) => getPayroll(tx, actor, id));
+    const report = await getStore().read((tx) => getPayroll(tx, actor, id));
     const lines = "lines" in report ? report.lines : null;
     const version = "version" in report ? report.version : 0;
+    const unpaid = (lines ?? []).filter((line) => line.state === "ready" || line.state === "failed").slice(0, 50);
+    let walletUri: string | null = null;
+    try {
+      walletUri = unpaid.length > 0
+        ? buildZip321(unpaid.map((line) => ({ address: line.address, amountZatoshi: BigInt(line.amountZatoshi), label: line.label })), config().network)
+        : null;
+    } catch {
+      walletUri = null;
+    }
     return (
       <div className="stack">
         <PageHeader eyebrow="Payments" title={report.label} lede="Approve the run before you record payments. A failed line can be retried without paying the others again." />
@@ -31,7 +41,7 @@ export default async function PayrollPage({ params }: { params: Promise<{ id: st
             ? "A math check matches the committed total. It does not prove that anyone was paid."
             : "There is no math check for the total yet. That does not, by itself, mean a payment failed."}
         </p>
-        <PayrollDesk id={id} version={version} state={report.state} canOperate={actor.user.role === "operator"} lines={lines} practice={config().allowSimulated} />
+        <PayrollDesk id={id} version={version} state={report.state} canOperate={actor.user.role === "operator"} lines={lines} practice={config().allowSimulated} walletUri={walletUri} />
         <Link href={`/operations/${id}`}>Open the activity record</Link>
       </div>
     );

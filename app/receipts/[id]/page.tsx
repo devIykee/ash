@@ -11,7 +11,7 @@ export const metadata = { title: "Receipt" };
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const receipt = await getStore().transaction((tx) => getReceipt(tx, id));
+    const receipt = await getStore().read((tx) => getReceipt(tx, id));
     const verdict = checkReceipt(receipt);
     const { publicKey, signature, ...body } = receipt;
     return (

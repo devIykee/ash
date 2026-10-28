@@ -11,7 +11,7 @@ export const metadata = { title: "Contractor payments" };
 
 export default async function PayrollListPage() {
   const actor = await requireActor();
-  const runs = await getStore().transaction((tx) => listPayroll(tx, actor));
+  const runs = await getStore().read((tx) => listPayroll(tx, actor));
   return (
     <div className="stack">
       <PageHeader

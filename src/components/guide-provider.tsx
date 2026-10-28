@@ -1,5 +1,6 @@
 "use client";
 
+import { storage } from "@/client/storage";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { getGuide, type Guide } from "@/guides/catalog";
@@ -47,8 +48,8 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   }
 
   function restart(id: string) {
-    localStorage.removeItem(`ash.guide.${id}`);
-    if (id === "orient") localStorage.setItem("ash.welcome", "toured");
+    storage.remove(`ash.guide.${id}`);
+    if (id === "orient") storage.set("ash.welcome", "toured");
     const next = getGuide(id);
     if (!next) return;
     setGuide(next);
@@ -62,7 +63,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   }
 
   function restartWelcome() {
-    localStorage.removeItem("ash.welcome");
+    storage.remove("ash.welcome");
     setGuide(null);
     if (pathname === "/workspace") setWelcome(true);
     else router.push("/workspace");
@@ -83,7 +84,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
       params.delete("step");
       const query = params.toString();
       window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
-    } else if (pathname === "/workspace" && !localStorage.getItem("ash.welcome")) {
+    } else if (pathname === "/workspace" && !storage.get("ash.welcome")) {
       setWelcome(true);
     }
     const media = window.matchMedia("(max-width: 760px)");
@@ -130,7 +131,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   }, [guide]);
 
   function remember(index: number | "done") {
-    if (guide) localStorage.setItem(`ash.guide.${guide.id}`, String(index));
+    if (guide) storage.set(`ash.guide.${guide.id}`, String(index));
   }
 
   function go(next: number) {
@@ -161,11 +162,11 @@ export function GuideProvider({ children }: { children: ReactNode }) {
       {welcome ? (
         <WelcomeDialog
           onTour={() => {
-            localStorage.setItem("ash.welcome", "toured");
+            storage.set("ash.welcome", "toured");
             start("orient", 0);
           }}
           onClose={() => {
-            localStorage.setItem("ash.welcome", "dismissed");
+            storage.set("ash.welcome", "dismissed");
             setWelcome(false);
           }}
         />
@@ -211,7 +212,7 @@ export function GuideProvider({ children }: { children: ReactNode }) {
 }
 
 function savedStep(id: string): number | null {
-  const raw = localStorage.getItem(`ash.guide.${id}`);
+  const raw = storage.get(`ash.guide.${id}`);
   if (!raw || raw === "done") return null;
   const step = Number(raw);
   return Number.isInteger(step) && step >= 0 ? step : null;

@@ -1,3 +1,4 @@
+import { recordLabel } from "@/components/labels";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { GuideStart } from "@/components/guide-provider";
@@ -12,7 +13,7 @@ export const metadata = { title: "Activity" };
 
 export default async function OperationsPage() {
   const actor = await requireActor();
-  const items = await getStore().transaction((tx) => listOperations(tx, actor));
+  const items = await getStore().read((tx) => listOperations(tx, actor));
   return (
     <div className="stack">
       <PageHeader
@@ -35,7 +36,7 @@ export default async function OperationsPage() {
           items.map((item) => (
             <Link className="card" key={item.id} href={`/operations/${item.id}`}>
               <p className="kicker">{typeLabel(item.type)}</p>
-              <h3>{item.label}</h3>
+              <h3>{recordLabel(item.label)}</h3>
               <StatusPill value={item.state} />
             </Link>
           ))

@@ -25,6 +25,12 @@ const COPY: Record<GrantCapability, string> = {
     "This is an owner-supplied report stored by ASH. ASH did not check it against the chain. Withdrawing the grant stops ASH from serving it. It does not erase a copy the auditor already saved.",
 };
 
+const GRANT_LABEL: Record<GrantCapability, string> = {
+  ufvk: "Full viewing key disclosure",
+  uivk: "Incoming viewing key disclosure",
+  filtered_report: "Written summary for a reviewer",
+};
+
 function effective(grant: GrantData, state: OperationRecord["state"], now = Date.now()): OperationRecord["state"] {
   if (state === "cancelled") return state;
   if (Date.parse(grant.applicationExpiresAt) <= now) return "expired";
@@ -70,7 +76,7 @@ export async function createGrant(
     state: "draft",
     initiatorId: actor.user.id,
     participantIds: [actor.user.id, input.auditorId],
-    label: `${input.capability} grant`,
+    label: GRANT_LABEL[input.capability],
     parentId: null,
     payment: null,
     access: null,

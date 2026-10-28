@@ -1,3 +1,4 @@
+import { recordLabel } from "@/components/labels";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EvidenceExport } from "@/components/evidence-desk";
@@ -14,13 +15,13 @@ export const metadata = { title: "Activity record" };
 export default async function OperationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const actor = await requireActor();
-  const detail = await getStore().transaction((tx) => operationDetail(tx, actor, id));
+  const detail = await getStore().read((tx) => operationDetail(tx, actor, id));
   if (!detail || detail === "forbidden") notFound();
   const operation = detail.operation;
   const workflowId = operation.parentId && operation.type === "tip" ? operation.parentId : id;
   return (
     <div className="stack">
-      <PageHeader eyebrow={typeLabel(operation.type)} title={operation.label} lede="This is the record ASH kept. It shows the status and the events. It does not add a payment that the check did not accept." />
+      <PageHeader eyebrow={typeLabel(operation.type)} title={recordLabel(operation.label)} lede="This is the record ASH kept. It shows the status and the events. It does not add a payment that the check did not accept." />
       <StatusPill value={operation.state} />
       <p className="muted">Reference {operation.id}</p>
       <p className="muted">People on this record: {operation.participantIds.join(", ") || "none recorded"}</p>

@@ -17,4 +17,6 @@ export interface Tx {
 export interface Store {
   readonly kind: "memory" | "file" | "postgres" | "unconfigured";
   transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
+  /** Runs fn without a write transaction or row locks. Any write throws. */
+  read<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
 }

@@ -1,12 +1,13 @@
 "use client";
 
+import { storage } from "@/client/storage";
 import { useEffect, useState } from "react";
 
 export function SavedFileKey({ offerId }: { offerId: string }) {
   const [fileKey, setFileKey] = useState("");
 
   useEffect(() => {
-    setFileKey(localStorage.getItem(`ash-content-key:${offerId}`) ?? "");
+    setFileKey(storage.get(`ash-content-key:${offerId}`) ?? "");
   }, [offerId]);
 
   if (!fileKey) {

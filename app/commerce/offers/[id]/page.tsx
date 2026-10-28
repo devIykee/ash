@@ -15,19 +15,26 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const actor = await currentActor();
   try {
-    const offer = await getStore().transaction((tx) => getOffer(tx, id, actor));
+    const offer = await getStore().read((tx) => getOffer(tx, id, actor));
     const price = `${zatoshiToZec(BigInt(offer.priceZatoshi))} ZEC`;
     return (
       <div className="stack">
         <PageHeader eyebrow={offer.sellerName} title={offer.title} lede={offer.description} />
         <div data-guide="offer-terms" className="stack">
           <p>
-            {price} · {offer.byteLength} encrypted bytes · {offer.network === "testnet" ? "Zcash testnet" : "Zcash mainnet"}
+            {price} · {offer.fileName ? `${offer.fileName} · ` : ""}
+            {offer.byteLength} encrypted bytes · {offer.network === "testnet" ? "Zcash testnet" : "Zcash mainnet"}
           </p>
+          {offer.payTo ? (
+            <>
+              <p className="muted">The seller receives payment at</p>
+              <p className="mono address-line">{offer.payTo}</p>
+            </>
+          ) : null}
           <p className="muted">Fingerprint of the original file</p>
-          <p className="mono">{offer.plaintextSha256}</p>
+          <p className="mono address-line">{offer.plaintextSha256}</p>
           <p className="muted">Fingerprint of the encrypted copy</p>
-          <p className="mono">{offer.ciphertextSha256}</p>
+          <p className="mono address-line">{offer.ciphertextSha256}</p>
         </div>
         {offer.disclosures.map((item) => (
           <p className="banner" key={item}>
@@ -35,7 +42,11 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           </p>
         ))}
         {"pack" in offer ? <SavedFileKey offerId={id} /> : null}
-        <BuyButton offerId={id} disabled={!actor} title={offer.title} price={price} />
+        {"pack" in offer ? (
+          <p className="muted">This is your offer. Buyers start a purchase from this page, then you allow delivery from the exchange.</p>
+        ) : (
+          <BuyButton offerId={id} disabled={!actor} title={offer.title} price={price} />
+        )}
         {!actor ? <p className="muted">Sign in as Jules Okonkwo before starting a purchase. Starting a purchase does not pay.</p> : null}
         <Link href="/commerce">Back to offers</Link>
       </div>

@@ -7,6 +7,8 @@ import { assertSealedBox, type SealedBox } from "@/crypto/box";
 import { assertPack, ciphertextSha256, type AshPack } from "@/crypto/pack";
 import { shareFromJson } from "@/crypto/shamir";
 import { config } from "@/server/config";
+import { assertShieldedDestination } from "@/zcash/address";
+import { buildZip321 } from "@/zcash/zip321";
 import type { Tx } from "@/store/types";
 import {
   assertParticipant,
@@ -29,6 +31,8 @@ export type OfferData = {
   description: string;
   priceZatoshi: string;
   network: "mainnet" | "testnet";
+  payTo?: string | null;
+  fileName?: string | null;
   plaintextSha256: string;
   ciphertextSha256: string;
   byteLength: number;
@@ -56,12 +60,21 @@ export type PublicOffer = {
   description: string;
   priceZatoshi: string;
   network: "mainnet" | "testnet";
+  payTo: string | null;
+  walletUri: string | null;
+  fileName: string | null;
   plaintextSha256: string;
   ciphertextSha256: string;
   byteLength: number;
   protocol: "shamir-2-of-3-mediator";
   disclosures: string[];
 };
+
+// Keeps a plain file name for the buyer's download. No paths or control characters.
+function safeFileName(value: string | undefined): string | null {
+  const name = (value ?? "").split(/[\\/]/).pop()?.replace(/[\u0000-\u001f\u007f"<>|:*?]/g, "").trim().slice(0, 120) ?? "";
+  return name && name !== "." && name !== ".." ? name : null;
+}
 
 function publish(id: string, offer: OfferData): PublicOffer {
   return {
@@ -71,6 +84,11 @@ function publish(id: string, offer: OfferData): PublicOffer {
     description: offer.description,
     priceZatoshi: offer.priceZatoshi,
     network: offer.network,
+    payTo: offer.payTo ?? null,
+    fileName: offer.fileName ?? null,
+    walletUri: offer.payTo
+      ? buildZip321([{ address: offer.payTo, amountZatoshi: BigInt(offer.priceZatoshi), label: offer.title }], offer.network)
+      : null,
     plaintextSha256: offer.plaintextSha256,
     ciphertextSha256: offer.ciphertextSha256,
     byteLength: offer.byteLength,
@@ -86,6 +104,8 @@ export async function createOffer(
     title: string;
     description: string;
     priceZec: string;
+    payTo?: string;
+    fileName?: string;
     plaintextSha256: string;
     pack: AshPack;
   },
@@ -100,6 +120,12 @@ export async function createOffer(
     }
     const price = zecToZatoshi(input.priceZec);
     if (price <= 0n) throw new AshError("invalid_amount", "Price must be greater than zero.");
+    const cfg = config();
+    const payToInput = input.payTo?.trim() || "";
+    if (!payToInput && !cfg.allowSimulated) {
+      throw new AshError("validation_failed", "Add the shielded address that receives the buyer's payment.");
+    }
+    const payTo = payToInput ? assertShieldedDestination(payToInput, cfg.network).address : null;
     const id = newId("offer");
     const offer: OfferData = {
       sellerId: actor.user.id,
@@ -107,7 +133,9 @@ export async function createOffer(
       title: input.title.trim(),
       description: input.description.trim(),
       priceZatoshi: price.toString(),
-      network: config().network,
+      network: cfg.network,
+      payTo,
+      fileName: safeFileName(input.fileName),
       plaintextSha256: input.plaintextSha256,
       ciphertextSha256: ciphertextSha256(input.pack),
       byteLength: input.pack.chunks.reduce((sum, chunk) => sum + chunk.ciphertext.length / 2, 0),
@@ -250,6 +278,9 @@ export async function payExchange(tx: Tx, actor: Actor, id: string, input: { exp
       throw new AshError("invalid_state", "The seller must authorize delivery before payment.", 409);
     }
     const cfg = config();
+    if (!cfg.allowSimulated && !input.txId) {
+      throw new AshError("txid_required", "Pay the seller from a wallet, then enter the transaction id.", 400);
+    }
     const payment = input.txId
       ? await settleObserved(tx, {
           idempotencyKey: `exchange:${id}`,

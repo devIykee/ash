@@ -8,6 +8,7 @@ export function ConfirmDialog({
   body,
   confirmLabel,
   pending = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
   children,
@@ -17,12 +18,16 @@ export function ConfirmDialog({
   body: string;
   confirmLabel: string;
   pending?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onClose: () => void;
   children?: ReactNode;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  // Latest callbacks, so the focus trap is set up once per opening, not on every keystroke.
+  const latest = useRef({ onClose, pending });
+  latest.current = { onClose, pending };
 
   useEffect(() => {
     if (!open) return;
@@ -32,9 +37,9 @@ export function ConfirmDialog({
       [...(node?.querySelectorAll<HTMLElement>("button, [href], input, select, textarea") ?? [])].filter((item) => !item.hasAttribute("disabled"));
     focusable()[0]?.focus();
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !pending) {
+      if (event.key === "Escape" && !latest.current.pending) {
         event.preventDefault();
-        onClose();
+        latest.current.onClose();
         return;
       }
       if (event.key !== "Tab" || !node) return;
@@ -55,7 +60,7 @@ export function ConfirmDialog({
       document.removeEventListener("keydown", onKey);
       previous?.focus();
     };
-  }, [open, onClose, pending]);
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -70,7 +75,7 @@ export function ConfirmDialog({
         <p>{body}</p>
         {children}
         <div className="row">
-          <button type="button" onClick={onConfirm} disabled={pending}>
+          <button type="button" onClick={onConfirm} disabled={pending || confirmDisabled}>
             {pending ? "Working" : confirmLabel}
           </button>
           <button className="quiet" type="button" onClick={onClose} disabled={pending}>

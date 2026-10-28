@@ -38,6 +38,26 @@ Vercel and the database host see request metadata, the document rows, and cipher
 
 `ASH_ZCASH_NETWORK` changes address checks, ZIP-321 context, and the `zcash:` network string in 402 challenges. It does not select a wallet. Simulated mode never broadcasts, on either network. Chain mode only queries the RPC URL you set. Point that URL at a testnet node when the network is testnet.
 
+The header badge and `/help#network` show the active network and mode to every visitor.
+
+### Mainnet checklist
+
+1. `ASH_ZCASH_NETWORK=mainnet`. The testnet pay-to fixture is never used on mainnet. Without `ASH_PAY_TO`, `/api/v1/paid/research` returns 503 `not_configured` and health reports `payToConfigured: false`.
+2. `ASH_PAY_TO` is a mainnet shielded address (`zs1…` or `u1…`) that you control. A testnet address is rejected.
+3. Forms no longer prefill sample addresses on mainnet. Creators must paste their own receiving address.
+4. For wallet payments, set `ASH_PAYMENT_MODE=chain` and a mainnet `ZCASH_RPC_URL`. Each payment screen then shows a ZIP-321 wallet link and asks for the transaction id. Offers and plans require a receiving address. A seen transaction is recorded as `observed`. It never unlocks a file, issues a receipt, extends a subscription, or serves the paid note, because a shielded amount and recipient are not visible to `getrawtransaction`.
+5. Run `ASH_BASE_URL=https://your-deployment pnpm smoke`. In chain mode set `SMOKE_TXID` to a transaction id your node knows.
+
+### What each mode does
+
+| Action | Practice (`simulated`) | Wallet (`chain`) |
+| --- | --- | --- |
+| Payroll | Records every line, retry a failed line | Pay from a wallet (one ZIP-321 link for unpaid lines), record each transaction id per line |
+| Tip | Practice payment and a signed receipt | Transaction id is looked up. No receipt for an observation |
+| File exchange | Practice payment unlocks the file | Transaction id is looked up. The file stays locked |
+| Subscription | Practice payment starts or extends the period | Transaction id is looked up. The period does not move |
+| Paid API | Practice payment returns a one-time reference | Transaction id is looked up. No reference is issued |
+
 ## External services
 
 | Service | Required | Privacy note |
@@ -51,7 +71,15 @@ No lightwalletd, no custodial payment processor, and no object store are configu
 
 ## After deployment
 
-1. `GET /api/ash/health` returns `status: "ok"`, `usingDevSecrets: false`, and `store: "postgres"`.
+`pnpm smoke` runs the steps below and about sixty other checks against any running ASH, and adapts to its network and mode:
+
+```bash
+ASH_BASE_URL=https://ash-nu-khaki.vercel.app pnpm smoke
+```
+
+It creates demo records on that deployment. Manual steps:
+
+1. `GET /api/ash/health` returns `status: "ok"`, `usingDevSecrets: false`, `store: "postgres"`, and `payToConfigured: true`.
 2. Sign in as Avery, create a one-line payroll run, authorize it, and execute it. The state becomes `completed` in simulated mode.
 3. As Noor, publish a short offer. As Jules, buy it, release it as Noor, pay, and decrypt in the browser.
 4. `GET /api/v1/paid/research` returns 402. After pay and retry, it returns the note once.

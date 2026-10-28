@@ -1,5 +1,5 @@
 import { DISCLOSURES, type OperationRecord } from "@/domain/types";
-import { config } from "@/server/config";
+import { config, payToStatus } from "@/server/config";
 import type { Tx } from "@/store/types";
 import type { Actor } from "./common";
 
@@ -22,6 +22,7 @@ export async function overview(tx: Tx, actor: Actor) {
       updatedAt: item.data.updatedAt,
     }));
   const cfg = config();
+  const payTo = payToStatus(cfg);
   return {
     cards,
     attention: cards.filter((card) => ATTENTION.has(card.state)),
@@ -31,12 +32,18 @@ export async function overview(tx: Tx, actor: Actor) {
     unresolvedDelivery: visible
       .filter((item) => item.data.type === "data_exchange" && ["awaiting_seller", "delivery_failed", "disputed"].includes(item.data.state))
       .map((item) => item.id),
+    // Facts about how this deployment works. Shown folded.
     warnings: [
       cfg.allowSimulated ? DISCLOSURES.simulated : DISCLOSURES.observed,
       DISCLOSURES.metadata,
       DISCLOSURES.orchard,
+      payTo.ok && payTo.fixture ? "The default pay-to address is an unfunded structural fixture, not a live wallet." : "",
+    ].filter(Boolean),
+    // Configuration an operator must fix. Shown open.
+    problems: [
       cfg.usingDevSecrets ? "Development signing keys are in use. Set SESSION_SECRET and RECEIPT_SIGNING_SECRET before a shared deployment." : "",
-      cfg.payTo.includes("ztestsapling1qv2z2") ? "The default pay-to address is an unfunded structural fixture, not a live wallet." : "",
+      payTo.ok ? "" : payTo.reason,
+      !cfg.allowSimulated && !cfg.rpcUrl ? "Wallet-payment mode is on, but ZCASH_RPC_URL is not set. ASH cannot look up any transaction." : "",
     ].filter(Boolean),
   };
 }
@@ -57,8 +64,7 @@ export async function listOperations(tx: Tx, actor: Actor) {
 }
 
 export async function operationDetail(tx: Tx, actor: Actor, id: string) {
-  const operations = await tx.list<OperationRecord>("operation");
-  const item = operations.find((operation) => operation.id === id);
+  const item = await tx.get<OperationRecord>("operation", id);
   if (!item) return null;
   const allowed =
     item.data.initiatorId === actor.user.id ||

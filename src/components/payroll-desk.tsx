@@ -8,6 +8,28 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { HelpNote } from "./help-note";
 import { paymentModeLabel, presentError, stateLabel } from "./labels";
 import { StatusPill } from "./status-pill";
+import { validTxId } from "./wallet-step";
+
+function RecordLine({ disabled, onRecord }: { disabled: boolean; onRecord: (txId: string) => void }) {
+  const [txId, setTxId] = useState("");
+  return (
+    <form
+      className="stack"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onRecord(txId);
+      }}
+    >
+      <label>
+        <span className="sr-only">Transaction id</span>
+        <input value={txId} onChange={(event) => setTxId(event.target.value.trim())} placeholder="Transaction id" spellCheck={false} autoComplete="off" />
+      </label>
+      <button className="small" type="submit" disabled={disabled || !validTxId(txId)}>
+        Record
+      </button>
+    </form>
+  );
+}
 
 type Line = {
   id: string;
@@ -27,6 +49,7 @@ export function PayrollDesk({
   canOperate,
   lines,
   practice,
+  walletUri,
 }: {
   id: string;
   version: number;
@@ -34,17 +57,18 @@ export function PayrollDesk({
   canOperate: boolean;
   lines: Line[] | null;
   practice: boolean;
+  walletUri?: string | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState<"send" | "cancel" | null>(null);
 
-  async function post(path: string) {
+  async function post(path: string, extra: Record<string, unknown> = {}) {
     setError("");
     setPending(true);
     try {
-      await api(path, { body: { expectedVersion: version } });
+      await api(path, { body: { expectedVersion: version, ...extra } });
       setConfirm(null);
       router.refresh();
     } catch (caught) {
@@ -59,6 +83,7 @@ export function PayrollDesk({
   const invalid = lines.some((line) => line.state === "invalid");
   const canApprove = canOperate && state === "validated" && !invalid;
   const canSend = canOperate && ["authorized", "partially_completed", "failed"].includes(state);
+  const canRecord = canOperate && !practice && ["authorized", "executing", "partially_completed", "failed"].includes(state);
   const canCancel = canOperate && ["draft", "validated", "authorized"].includes(state);
   return (
     <div className="stack">
@@ -78,7 +103,7 @@ export function PayrollDesk({
               <tr key={line.id}>
                 <td>
                   {line.label}
-                  <div className="mono muted">{line.address}</div>
+                  <div className="mono muted address-line">{line.address}</div>
                 </td>
                 <td className="mono">{zatoshiToZec(BigInt(line.amountZatoshi))} ZEC</td>
                 <td className="mono">{zatoshiToZec(BigInt(line.feeZatoshi))} ZEC</td>
@@ -87,7 +112,10 @@ export function PayrollDesk({
                   {line.error ? <div className="muted">{line.error}</div> : null}
                 </td>
                 <td>
-                  {canOperate && line.state === "failed" ? (
+                  {canRecord && (line.state === "ready" || line.state === "failed") ? (
+                    <RecordLine disabled={pending} onRecord={(txId) => post(`/api/ash/payroll/${id}/lines/${line.id}/record`, { txId })} />
+                  ) : null}
+                  {practice && canOperate && line.state === "failed" ? (
                     <button type="button" onClick={() => post(`/api/ash/payroll/${id}/lines/${line.id}/retry`)} disabled={pending}>
                       Retry this person
                     </button>
@@ -101,16 +129,26 @@ export function PayrollDesk({
       {canOperate ? (
         <div className="stack" data-guide="payroll-actions">
           {invalid ? <p className="banner">Correct the highlighted lines before this run can be approved. Nothing has been sent.</p> : null}
-          {state === "completed" ? <p className="banner ok">This run is finished. The practice payments were not sent on the network.</p> : null}
+          {state === "completed" ? (
+            <p className="banner ok">{practice ? "This run is finished. The practice payments were not sent on the network." : "This run is finished."}</p>
+          ) : null}
+          {canRecord && walletUri ? (
+            <div className="wallet-step">
+              <p>
+                <a href={walletUri}>Open every unpaid line in your wallet</a> as one payment request, or pay each address yourself.
+              </p>
+              <p className="muted">After sending, paste each transaction id on its line. ASH looks it up on a Zcash node. Seeing it does not prove the amount, so the run stays open until you reconcile it in your wallet.</p>
+            </div>
+          ) : null}
           <div className="row">
             {canApprove ? (
               <button type="button" onClick={() => post(`/api/ash/payroll/${id}/authorize`)} disabled={pending}>
                 Approve run
               </button>
             ) : null}
-            {canSend ? (
+            {canSend && practice ? (
               <button type="button" onClick={() => setConfirm("send")} disabled={pending}>
-                {practice ? "Record practice payments" : "Record payments"}
+                Record practice payments
               </button>
             ) : null}
             {canCancel ? (
@@ -131,7 +169,7 @@ export function PayrollDesk({
         body={
           practice
             ? `This records a practice payment for ${lines.length} people, totaling ${zatoshiToZec(total)} ZEC. Nothing is broadcast to Zcash. A failed line can be retried without paying the others again.`
-            : "ASH will try to record the payment check. In network-check mode it does not build or broadcast a transaction, and a practice payment is refused."
+            : "Pay each line from your wallet, then record its transaction id on the line."
         }
         confirmLabel={practice ? "Record practice payments" : "Continue"}
         pending={pending}

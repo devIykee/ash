@@ -29,6 +29,8 @@ Payment states are separate: instructions created, submitted, observed, verified
 
 Next.js App Router serves the workspace and the API. Domain services share one operation record, one append-only event log, and one payment adapter. PostgreSQL is used when `DATABASE_URL` is set. Local development uses a JSON file. Tests use memory.
 
+Read-only pages use a lock-free read path and resolve the demo persona without a database call, so a page costs one or two queries. The schema and persona seed run once per server process.
+
 ```mermaid
 flowchart LR
   UI[Workspace] --> API[ASH API]
@@ -70,9 +72,21 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm agent:demo
+pnpm smoke
 ```
 
-`pnpm agent:demo` needs ASH already running, from `pnpm dev` or `pnpm start`. It writes `demo-output/`, which is gitignored.
+`pnpm agent:demo` and `pnpm smoke` need ASH already running, from `pnpm dev` or `pnpm start`. Set `ASH_BASE_URL` to point them at another deployment. `pnpm smoke` walks every module over HTTP, reads the server's network and payment mode from `/api/ash/health`, and expects the matching behavior. `pnpm agent:demo` writes `demo-output/`, which is gitignored.
+
+## Testnet, mainnet, and payment modes
+
+The network and the payment mode are independent. Every combination works:
+
+| | Practice payments (`simulated`) | Wallet payments (`chain`) |
+| --- | --- | --- |
+| Testnet | Default. Sample fixture addresses are prefilled | Pay with a testnet wallet, paste the transaction id |
+| Mainnet | Mainnet address checks, no prefilled samples | Pay with a mainnet wallet, paste the transaction id |
+
+On mainnet, `ASH_PAY_TO` must be set to your own mainnet shielded address. The testnet fixture is never used there. In wallet mode, ASH shows a ZIP-321 link and the receiving address, then asks a node whether the transaction id exists. That observation is recorded but never releases a file, a receipt, a subscription period, or the paid note. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mainnet-checklist).
 
 ## Environment
 
@@ -80,12 +94,12 @@ See `.env.example`.
 
 | Variable | Purpose |
 | --- | --- |
-| `ASH_ZCASH_NETWORK` | `testnet` (default) or `mainnet` |
-| `ASH_PAYMENT_MODE` | `simulated` (default) or `chain` |
+| `ASH_ZCASH_NETWORK` | `testnet` (default) or `mainnet`. Case-insensitive |
+| `ASH_PAYMENT_MODE` | `simulated` (default, practice payments) or `chain` (wallet payments, transaction id lookup) |
 | `ZCASH_RPC_URL` | Optional `getrawtransaction` endpoint |
 | `ZCASH_RPC_USER`, `ZCASH_RPC_PASSWORD` | Optional RPC basic auth |
 | `ASH_REQUIRED_CONFIRMATIONS` | Default 3. Observation alone still does not release data |
-| `ASH_PAY_TO` | Shielded address on API challenges. The code default is an unfunded structural fixture |
+| `ASH_PAY_TO` | Shielded address on API challenges. On testnet the default is an unfunded structural fixture. Required on mainnet |
 | `SESSION_SECRET`, `RECEIPT_SIGNING_SECRET` | Required before a shared deployment |
 | `DATABASE_URL` | Postgres. Required on Vercel |
 | `ASH_DATA_PATH` | Local JSON store, default `.data/ash.json` |

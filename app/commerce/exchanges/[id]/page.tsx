@@ -1,3 +1,4 @@
+import { recordLabel } from "@/components/labels";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExchangeDesk } from "@/components/exchange-desk";
@@ -7,7 +8,7 @@ import { StatusPill } from "@/components/status-pill";
 import { AshError } from "@/domain/errors";
 import { DISCLOSURES } from "@/domain/types";
 import { paymentModeLabel, stateLabel } from "@/components/labels";
-import { getExchange } from "@/services/exchange";
+import { getExchange, getOffer } from "@/services/exchange";
 import { operationDetail } from "@/services/overview";
 import { config } from "@/server/config";
 import { requireActor } from "@/server/current";
@@ -19,10 +20,11 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const actor = await requireActor();
   try {
-    const [detail, exchange] = await getStore().transaction(async (tx) => {
+    const [detail, exchange, offer] = await getStore().read(async (tx) => {
       const loaded = await getExchange(tx, actor, id);
       const operation = await operationDetail(tx, actor, id);
-      return [operation, loaded] as const;
+      const listing = await getOffer(tx, loaded.exchange.offerId, null);
+      return [operation, loaded, listing] as const;
     });
     if (!detail || detail === "forbidden") notFound();
     const role = actor.user.id === exchange.exchange.sellerId ? "seller" : actor.user.id === exchange.exchange.buyerId ? "buyer" : "other";
@@ -31,7 +33,7 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
       <div className="stack">
         <PageHeader
           eyebrow="File exchange"
-          title={detail.operation.label}
+          title={recordLabel(detail.operation.label)}
           lede="The sender allows delivery, then the buyer pays. Opening the file happens in this browser."
           actions={<GuideStart id="delivery">If delivery fails</GuideStart>}
         />
@@ -54,6 +56,9 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           buyerPublicKey={exchange.exchange.buyerPublicKey}
           releaseReady={exchange.exchange.releaseReady}
           practice={config().allowSimulated}
+          walletUri={offer.walletUri}
+          payTo={offer.payTo}
+          fileName={offer.fileName}
         />
         <Link href={`/operations/${id}`}>Open the activity record</Link>
       </div>

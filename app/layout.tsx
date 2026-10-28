@@ -1,12 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "@fontsource/outfit/latin-400.css";
 import "@fontsource/outfit/latin-500.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import { Shell } from "@/components/shell";
 import { currentActor } from "@/server/current";
+import { runtime } from "@/server/runtime";
 import "./globals.css";
 
 const description = "Pay someone, send a locked file, or show one payment to a reviewer. They only see that.";
+
+export const viewport: Viewport = {
+  themeColor: "#f6f3ec",
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: { default: "ASH", template: "%s · ASH" },
@@ -29,7 +36,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        <Shell user={user}>{children}</Shell>
+        <Shell user={user} runtime={runtime()}>
+          {children}
+        </Shell>
       </body>
     </html>
   );
