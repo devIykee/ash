@@ -1,6 +1,13 @@
 # Demo
 
-The demo uses testnet-shaped addresses and the simulated payment adapter. It does not broadcast Zcash. Say that while you show it. Health warnings on the overview repeat it.
+Practice mode uses labeled practice payments and sample addresses. Testnet and Mainnet take real payments from your own wallet and verify them on chain. Say which mode you are in while you show it. The sidebar switch and the banner show it on every page.
+
+## Real testnet payment (the strongest demo)
+
+1. Switch to **Testnet**. Sign in as Noor Hale. Open **Receiving keys** and choose **Create a wallet**. Save the 24 words, tick the box, and choose **Use this wallet**.
+2. Payments → New tip page → publish. Open the tip page, choose an amount, and **Continue to payment**. A QR code, the address, and a memo like `ASH 7KQ2M9XCAB` appear.
+3. Pay it from a testnet wallet (Zashi or YWallet set to testnet), keeping the memo. The panel moves from "Waiting for your payment" to "seen" to "confirmed", and the signed receipt appears with verification level `confirmed`.
+4. Restore the 24 words in a testnet wallet with the birthday height to show the funds arrived and can be spent.
 
 ## Prepare
 
@@ -53,4 +60,4 @@ As Noor, publish the research feed. As Jules, subscribe and renew. The state bec
 
 ## What not to claim
 
-Do not say the payment was confirmed on testnet. Do not say the file trade is atomic. Do not say Sam received a viewing key. Do not say the sum proof is a Zcash proof.
+Do not say ASH broadcast the payment: the wallet did. Do not say a practice payment was on chain. Do not say the file trade is atomic. Do not say Sam received a viewing key. Do not say the sum proof is a Zcash proof.

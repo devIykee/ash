@@ -8,7 +8,7 @@ export function PayoutNotice({ runtime, payout }: { runtime: Runtime; payout: st
   if (!payout) {
     return (
       <div className="banner danger">
-        You have no {runtime.network} receiving key yet, so ASH cannot verify payments to you. <Link href="/settings">Add your receiving address and viewing key</Link> first.
+        You have no {runtime.network} receiving key yet, so ASH cannot verify payments to you. <Link href="/settings">Add a receiving key, or create a wallet in your browser</Link> first.
       </div>
     );
   }

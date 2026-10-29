@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { api } from "@/client/api";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
+import { CreateWallet } from "./create-wallet";
 import { useToast } from "./toast";
 
 export type WalletKeyView = {
@@ -32,6 +33,7 @@ export function WalletKeyCard({ network, current, operator }: { network: "testne
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [creating, setCreating] = useState(false);
   const label = network === "mainnet" ? "Mainnet" : "Testnet";
 
   async function save(event: FormEvent) {
@@ -80,8 +82,26 @@ export function WalletKeyCard({ network, current, operator }: { network: "testne
             </button>
           </div>
         </div>
+      ) : creating ? (
+        <CreateWallet
+          network={network}
+          onCancel={() => setCreating(false)}
+          onDone={() => {
+            setCreating(false);
+            setEditing(false);
+          }}
+        />
       ) : (
         <form className="stack" onSubmit={save} style={{ maxWidth: "none" }}>
+          <div className="create-wallet row" style={{ justifyContent: "space-between" }}>
+            <span className="muted" style={{ fontSize: "0.92rem" }}>
+              No wallet yet? ASH can create one in this browser. You keep the recovery phrase.
+            </span>
+            <button className="small" type="button" onClick={() => setCreating(true)}>
+              Create a wallet
+            </button>
+          </div>
+          <p className="kicker">Or use a wallet you already have</p>
           <label>
             Receiving address on {network}
             <input value={address} onChange={(event) => setAddress(event.target.value.trim())} placeholder={network === "mainnet" ? "u1… or zs1…" : "utest1… or ztestsapling1…"} spellCheck={false} autoComplete="off" required />

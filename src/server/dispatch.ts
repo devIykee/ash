@@ -50,6 +50,7 @@ import { listWalletKeys, removeWalletKey, saveWalletKey } from "@/services/walle
 import { resolveActor } from "./actor";
 import { clearSessionCookie, sessionCookie, signSession } from "./auth";
 import { config } from "./config";
+import { getLatestHeight } from "@/zcash/lightwalletd";
 import { allowedModes, defaultMode, modeCookie, modeFromRequest, resolveMode, withMode } from "./mode";
 import { assertSameOrigin, errorResponse, idempotencyKey, json, parseBody, readJson } from "./http";
 import { rateLimit } from "./rate-limit";
@@ -470,6 +471,15 @@ export async function handleAsh(req: Request, segments: string[]): Promise<Respo
       rateLimit(`${clientKey(req)}:${req.method}:${segments[0] ?? "root"}`);
       if (req.method !== "GET" && req.method !== "HEAD") assertSameOrigin(req);
       if (segments[0] === "health" && req.method === "GET") return json(healthBody());
+      if (segments[0] === "chain" && segments[1] === "height" && req.method === "GET") {
+        // The current block height, so a new wallet can record its birthday for a fast restore.
+        const network = new URL(req.url).searchParams.get("network") === "mainnet" ? "mainnet" : "testnet";
+        try {
+          return json({ network, height: await getLatestHeight(config(network === "mainnet" ? "mainnet" : "testnet").lightwalletdUrl) });
+        } catch {
+          return json({ network, height: null });
+        }
+      }
       const network = await networkRoute(req, segments);
       if (network) return network;
       return await getStore().transaction(async (tx) => route({ req, tx, actor: await resolveActor(tx, req), segments }));

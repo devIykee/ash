@@ -21,6 +21,7 @@ One operation moves through create, conditions, authorization, payment, verifica
 | Audit grants | Partially implemented | Honest scope records and filtered reports. Viewing keys are not stored or revoked |
 | Subscriptions | Implemented as renewal coordination | Explicit renewals, grace, soft restriction, cancellation |
 | Memo linter | Implemented | Local pattern analysis and a reviewed cleanup |
+| Wallet creation | Implemented | 24-word phrase generated in the browser, Sapling account registered by address and viewing key only |
 | Dispute evidence | Implemented | Signed package, optional encryption to an arbiter key, local verification |
 
 Payment states are separate: instructions created, submitted, observed, verified, confirmed, rejected, unresolved. Only a practice payment marked `verified` (practice mode only), or a chain payment marked `confirmed` with enough confirmations, can satisfy a release. A chain payment is confirmed only after ASH decrypts it with the payee's viewing key and the amount, recipient, memo reference, and note commitment all match.
@@ -87,7 +88,7 @@ Switch modes in the sidebar (or at the top of the screen on phones). Each mode i
 | Testnet | Real Zcash testnet payments from your wallet, verified on chain. Test coins have no value. |
 | Mainnet | Real Zcash mainnet payments from your wallet, verified on chain. Real money. |
 
-To be paid in testnet or mainnet, add your receiving address and a viewing key under **Receiving keys**. A payment request then shows a ZIP-321 link, a QR code, and a unique memo. The payer's wallet signs and broadcasts the transaction. ASH finds it through lightwalletd, decrypts it with your viewing key, checks the amount, recipient, memo reference, and note commitment, and unlocks the tip receipt, file, subscription period, or paid API once it has enough confirmations. Payroll is confirmed from the operator's outgoing notes. ASH never holds a spending key. Details: [docs/ZCASH_INTEGRATION.md](docs/ZCASH_INTEGRATION.md).
+To be paid in testnet or mainnet, add your receiving address and a viewing key under **Receiving keys**, or choose **Create a wallet**: ASH generates a standard 24-word recovery phrase in your browser (BIP 39, ZIP 32 account 0), you save it, and only the address and viewing key are sent to the server. The phrase restores in Zashi or YWallet. A payment request then shows a ZIP-321 link, a QR code, and a unique memo. The payer's wallet signs and broadcasts the transaction. ASH finds it through lightwalletd, decrypts it with your viewing key, checks the amount, recipient, memo reference, and note commitment, and unlocks the tip receipt, file, subscription period, or paid API once it has enough confirmations. Payroll is confirmed from the operator's outgoing notes. ASH never holds a spending key. Details: [docs/ZCASH_INTEGRATION.md](docs/ZCASH_INTEGRATION.md).
 
 Demo personas are shared and have no password. On a public deployment, anyone can change a persona's receiving key, so do not take real mainnet payments there without real accounts.
 

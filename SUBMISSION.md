@@ -8,16 +8,18 @@ Private payments still leak through memos, recipient lists, viewing keys, and sc
 
 ASH is one workspace for that operation: define the parties and the price, authorize, pay through a shielded-first adapter, verify, deliver or grant access, reconcile, and export a small evidence package.
 
-The demo payment adapter is simulated and labeled. Chain mode can ask a node whether a transaction id exists. It cannot see a shielded amount, and it cannot unlock delivery. Receipts, grants, and evidence say what they actually prove.
+ASH runs in three modes, switched in the app: Practice (labeled practice payments), Testnet, and Mainnet. In Testnet and Mainnet, payments are real shielded Zcash transactions sent from the payer's own wallet. ASH finds them through lightwalletd, decrypts them with the payee's viewing key, checks the amount, recipient, memo reference, and note commitment, and unlocks the item after enough confirmations. ASH never holds a spending key. People without a wallet can create one in their browser and keep the recovery phrase. Receipts, grants, and evidence say what they actually prove.
 
 ## Zcash integration
 
-- Testnet by default. No spending keys on the server.
-- Structural checks for Sapling and unified addresses. Transparent and Sprout destinations are rejected.
-- ZIP-321 payment requests for tip pages.
+- Practice, Testnet, and Mainnet modes. Real payments are verified on chain on both networks. No spending keys on the server.
+- Sapling note decryption and note-commitment checks, outgoing-note recovery for payroll, F4Jumble and unified address and viewing key parsing, and ZIP 32 key derivation with FF1 diversifiers, all tested against the official zcash-test-vectors.
+- Payment requests with a unique memo reference, a ZIP-321 link, and a QR code. Each on-chain output can satisfy one request only.
+- In-browser wallet creation (BIP 39, ZIP 32 account 0). The phrase never leaves the browser and restores in Zashi or YWallet.
+- Transparent and Sprout destinations are rejected.
 - Integer zatoshi amounts.
 - Honest NU6.3 behavior: Orchard-protocol payments settle into Ironwood, Sapling still accepts value, and ASH does not build the transaction.
-- Viewing-key screens describe UFVK and UIVK scope and refuse to store the key. Application expiry is not revocation.
+- Receiving keys are sealed with AES-256-GCM, never returned by the API, and checked to derive the pasted address. Audit-grant screens still refuse to store a viewing key for a reviewer. Application expiry is not revocation.
 - FROST is not used. It is a threshold signature protocol, not escrow.
 
 ## Privacy architecture
@@ -29,11 +31,13 @@ Files are encrypted in the browser with AES-256-GCM. The content key is split wi
 | Area | State |
 | --- | --- |
 | Shared operation lifecycle | Implemented |
-| Payroll, tips, 402 API, subscriptions, memo linter, evidence | Implemented on the simulated adapter |
+| Payroll, tips, 402 API, subscriptions, file exchange | Implemented in practice, testnet, and mainnet. Real payments are verified on chain |
+| Memo linter, evidence packages | Implemented |
+| In-browser wallet creation | Implemented (Sapling account; the phrase stays in the browser) |
 | Encrypted exchange | Implemented prototype with explicit trust assumptions |
-| Viewing-key grants | Partial. Disclosures and filtered reports only |
-| Chain verification of shielded amount | Not implemented |
-| Wallet broadcast, FROST, automatic shielded debit | Planned |
+| Viewing-key audit grants | Partial. Disclosures and filtered reports only |
+| Orchard and Ironwood note verification | Not implemented. Requests use Sapling receivers |
+| Transaction construction and broadcast by ASH, FROST, automatic shielded debit | Not implemented. The payer's wallet broadcasts |
 | Hosted demo | https://ash-nu-khaki.vercel.app |
 
 ## Demo
@@ -42,9 +46,9 @@ URL: https://ash-nu-khaki.vercel.app
 
 Repository: https://github.com/devIykee/ash
 
-Placeholder video: `https://video.example.invalid/ash`
+Video: to be recorded before submission.
 
-Local steps are in [docs/DEMO.md](docs/DEMO.md). Sign in as Noor, Jules, and Avery and run the encrypted-note purchase, or run `pnpm agent:demo` against `pnpm dev`.
+Local steps are in [docs/DEMO.md](docs/DEMO.md). The live site checks itself with `ASH_BASE_URL=https://ash-nu-khaki.vercel.app SMOKE_MODE=testnet pnpm smoke` (also `practice` and `mainnet`).
 
 ## Tracks
 
@@ -52,4 +56,4 @@ The work sits across Shielded Payments (payroll, tips, subscriptions, the paymen
 
 ## Status
 
-The statements above match the code in this repository. Simulated payments are labeled in the product and in receipts. Where a control is only an application rule, the docs say so.
+The statements above match the code in this repository. Practice payments are labeled in the product and in receipts, and they can never satisfy a testnet or mainnet record. Where a control is only an application rule, the docs say so. Demo personas have no password, so a public deployment should not take real mainnet payments without real accounts.
