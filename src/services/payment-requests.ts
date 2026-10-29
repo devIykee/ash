@@ -144,6 +144,9 @@ export async function checkPaymentRequest(ref: string, txId?: string): Promise<P
   const request = loaded.request;
   if (request.status === "confirmed" && request.appliedAt) return publicRequest(request);
   if (!loaded.key) throw new AshError("payee_key_missing", "The payee's receiving key was removed, so ASH cannot verify this payment.", 409);
+  if (loaded.key.saplingAddress !== request.address) {
+    throw new AshError("payee_key_changed", "The payee replaced their receiving key after this request was made. Ask them to add the earlier key back, or start a new payment.", 409);
+  }
   const cfg = config(request.mode);
   const expected = { ivk: loaded.key.ivk, address: loaded.key.address, minZatoshi: BigInt(request.amountZatoshi), memoRef: request.ref };
 

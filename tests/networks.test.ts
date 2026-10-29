@@ -243,3 +243,16 @@ describe("malformed chain data", () => {
     expect(result.status).toBe("mismatch");
   });
 });
+
+describe("changed receiving key", () => {
+  it("explains instead of silently failing when the payee replaced their key", async () => {
+    const network = "testnet";
+    const first = makeWallet(network);
+    await inMode("testnet", () => store.transaction((tx) => saveWalletKey(tx, noor, { network, address: first.address, viewingKey: first.viewingKey })));
+    const tip = await inMode("testnet", () => store.transaction((tx) => createTip(tx, noor, { title: "Jar", address: "", suggestedZec: ["0.001"], statement: "" }, key("kc-tip"))));
+    const started = await inMode("testnet", () => store.transaction((tx) => payTip(tx, null, tip.operation.id, { amountZec: "0.001" }, key("kc-pay"))));
+    const second = makeWallet(network);
+    await inMode("testnet", () => store.transaction((tx) => saveWalletKey(tx, noor, { network, address: second.address, viewingKey: second.viewingKey })));
+    await expect(inMode("testnet", () => checkPaymentRequest(started.request!.ref))).rejects.toThrow(/replaced their receiving key/);
+  });
+});
