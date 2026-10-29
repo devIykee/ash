@@ -2,13 +2,16 @@ import { AshError } from "@/domain/errors";
 import { newId } from "@/domain/ids";
 import { zecToZatoshi } from "@/domain/money";
 import { paymentSatisfies } from "@/domain/payment";
-import { DISCLOSURES, type OperationRecord, type OperationState } from "@/domain/types";
+import { DISCLOSURES, type Mode, type OperationRecord, type OperationState, type PaymentRecord } from "@/domain/types";
 import { config } from "@/server/config";
 import { assertShieldedDestination } from "@/zcash/address";
 import { buildZip321 } from "@/zcash/zip321";
 import type { Tx } from "@/store/types";
-import { assertPerson, assertRole, assertScope, idempotent, mustGet, requestHash, settleObserved, settleSimulated, type Actor } from "./common";
+import { assertPerson, assertRole, assertScope, idempotent, mustGet, requestHash, settleSimulated, type Actor } from "./common";
 import { createOperation, saveOperation } from "./events";
+import { createPaymentRequest, onPayment, publicRequest, requestForOperation } from "./payment-requests";
+import { payoutAddress } from "./wallet-keys";
+import { currentMode, recordMode, withMode } from "@/server/mode";
 
 export type SubscriptionOffer = {
   providerId: string;
@@ -20,6 +23,7 @@ export type SubscriptionOffer = {
   graceDays: number;
   payTo?: string | null;
   network?: "mainnet" | "testnet";
+  mode?: Mode;
 };
 
 export type SubscriptionData = {
@@ -60,10 +64,12 @@ export async function createSubscriptionOffer(
   assertRole(actor, ["creator", "operator"]);
   if (input.intervalDays < 1 || input.graceDays < 0) throw new AshError("validation_failed", "Interval and grace must be non-negative.");
   const cfg = config();
-  const payToInput = input.payTo?.trim() || "";
-  if (!payToInput && !cfg.allowSimulated) {
-    throw new AshError("validation_failed", "Add the shielded address that receives renewals.");
+  // Real modes pay the provider's verified receiving address.
+  const verified = cfg.allowSimulated ? null : await payoutAddress(tx, actor.user.id, cfg.network);
+  if (!cfg.allowSimulated && !verified) {
+    throw new AshError("payee_key_missing", `Add your ${cfg.network} receiving address and viewing key in Settings first, so ASH can verify renewals to you.`, 409);
   }
+  const payToInput = verified ?? (input.payTo?.trim() || "");
   const price = zecToZatoshi(input.priceZec);
   if (price <= 0n) throw new AshError("invalid_amount", "Price must be greater than zero.");
   const offer: SubscriptionOffer = {
@@ -76,6 +82,7 @@ export async function createSubscriptionOffer(
     graceDays: input.graceDays,
     payTo: payToInput ? assertShieldedDestination(payToInput, cfg.network).address : null,
     network: cfg.network,
+    mode: cfg.mode,
   };
   const id = newId("plan");
   await tx.put("plan", id, offer, null);
@@ -83,7 +90,8 @@ export async function createSubscriptionOffer(
 }
 
 export async function listPlans(tx: Tx) {
-  const plans = await tx.list<SubscriptionOffer>("plan");
+  const mode = currentMode();
+  const plans = (await tx.list<SubscriptionOffer>("plan")).filter((plan) => recordMode(plan.data) === mode);
   return plans.map((plan) => ({
     id: plan.id,
     ...plan.data,
@@ -152,6 +160,49 @@ async function persistEffective(tx: Tx, operation: { id: string; version: number
   return { version: saved.version, operation: saved.data, subscription: data, effective: next };
 }
 
+/** Extends the period for one accepted payment. Idempotent per payment key. */
+async function applyRenewal(
+  tx: Tx,
+  operation: { id: string; version: number; data: OperationRecord },
+  doc: { id: string; version: number; data: SubscriptionData },
+  payment: PaymentRecord,
+  now: number,
+) {
+  if (doc.data.appliedPaymentIds.includes(payment.idempotencyKey)) {
+    return persistEffective(tx, operation, doc.data, now);
+  }
+  const base = Math.max(now, doc.data.currentPeriodEnd ? Date.parse(doc.data.currentPeriodEnd) : now);
+  const nextData: SubscriptionData = {
+    ...doc.data,
+    currentPeriodEnd: new Date(base + doc.data.intervalDays * DAY).toISOString(),
+    appliedPaymentIds: [...doc.data.appliedPaymentIds, payment.idempotencyKey],
+  };
+  await tx.put("subscription", doc.id, nextData, doc.version);
+  const stepped =
+    operation.data.state === "awaiting_payment" || operation.data.state === "payment_observed"
+      ? await saveOperation(tx, operation, { ...operation.data, state: "payment_verified", payment }, "payment_recorded", payment.mode, payment.txId)
+      : operation;
+  const active =
+    stepped.data.state === "completed"
+      ? await saveOperation(
+          tx,
+          stepped,
+          { ...stepped.data, payment, access: { kind: "subscription", entitled: true, restricted: false, note: "Renewed by a verified payment." } },
+          "renewed",
+          null,
+          payment.txId,
+        )
+      : await saveOperation(
+          tx,
+          stepped,
+          { ...stepped.data, state: "completed", payment, access: { kind: "subscription", entitled: true, restricted: false, note: "Renewed by a verified payment." } },
+          "renewed",
+          null,
+          payment.txId,
+        );
+  return { version: active.version, operation: active.data, subscription: nextData, effective: effectiveSubscription(nextData, "completed", now) };
+}
+
 export async function renewSubscription(
   tx: Tx,
   actor: Actor,
@@ -159,84 +210,52 @@ export async function renewSubscription(
   expectedVersion: number,
   idempotencyKey: string | null,
   now = Date.now(),
-  txId?: string,
 ) {
   assertScope(actor, "pay");
-  return idempotent(tx, `renew:${id}`, idempotencyKey, requestHash({ id, expectedVersion, txId: txId ?? null }), async () => {
-    const operation = await mustGet<OperationRecord>(tx, "operation", id);
-    if (operation.version !== expectedVersion) throw new AshError("conflict", "This subscription changed. Reload it.", 409);
-    const doc = await mustGet<SubscriptionData>(tx, "subscription", id);
-    if (actor.user.id !== doc.data.customerId) throw new AshError("forbidden", "Only the customer can renew.", 403);
-    if (operation.data.state === "cancelled") throw new AshError("invalid_state", "A cancelled subscription does not renew.", 409);
-    const cfg = config();
-    if (!cfg.allowSimulated && !txId) {
-      throw new AshError("txid_required", "Pay the renewal from a wallet, then enter the transaction id.", 400);
-    }
-    const paymentKey = txId ? `renew:${id}:tx:${txId}` : idempotencyKey || `renew:${id}:${now}`;
-    const payment = txId
-      ? await settleObserved(tx, { idempotencyKey: paymentKey, txId, amountZatoshi: doc.data.priceZatoshi, feeZatoshi: "0" })
-      : await settleSimulated(tx, actor, {
-          idempotencyKey: paymentKey,
-          amountZatoshi: doc.data.priceZatoshi,
-          feeZatoshi: "0",
-        });
-    if (!paymentSatisfies(payment, cfg.allowSimulated)) {
-      if (payment.status !== "observed") {
+  const record = await mustGet<OperationRecord>(tx, "operation", id);
+  return withMode(recordMode(record.data), () =>
+    idempotent(tx, `renew:${id}`, idempotencyKey, requestHash({ id, expectedVersion }), async () => {
+      const operation = await mustGet<OperationRecord>(tx, "operation", id);
+      if (operation.version !== expectedVersion) throw new AshError("conflict", "This subscription changed. Reload it.", 409);
+      const doc = await mustGet<SubscriptionData>(tx, "subscription", id);
+      if (actor.user.id !== doc.data.customerId) throw new AshError("forbidden", "Only the customer can renew.", 403);
+      if (operation.data.state === "cancelled") throw new AshError("invalid_state", "A cancelled subscription does not renew.", 409);
+      const cfg = config();
+      if (!cfg.allowSimulated) {
+        // Real payment: one request per period. The period moves only when it is confirmed.
+        const existing = await requestForOperation(tx, id);
+        const request =
+          existing && existing.status !== "confirmed"
+            ? existing
+            : await createPaymentRequest(tx, { operationId: id, purpose: "renewal", payeeId: doc.data.providerId, amountZatoshi: BigInt(doc.data.priceZatoshi), label: doc.data.title });
+        return { version: operation.version, operation: operation.data, subscription: doc.data, effective: effectiveSubscription(doc.data, operation.data.state, now), request: publicRequest(request) };
+      }
+      const payment = await settleSimulated(tx, actor, {
+        idempotencyKey: idempotencyKey || `renew:${id}:${now}`,
+        amountZatoshi: doc.data.priceZatoshi,
+        feeZatoshi: "0",
+      });
+      if (!paymentSatisfies(payment, cfg.allowSimulated)) {
         throw new AshError("payment_unverified", payment.reason || "The renewal payment was not accepted.", 402);
       }
-      // A node saw the transaction. That is not proof of amount or recipient, so the period does not move.
-      const nextState = operation.data.state === "awaiting_payment" ? "payment_observed" : operation.data.state;
-      const saved = await saveOperation(
-        tx,
-        operation,
-        {
-          ...operation.data,
-          state: nextState,
-          payment,
-          access: operation.data.access && nextState !== "payment_observed"
-            ? operation.data.access
-            : { kind: "subscription", entitled: false, restricted: true, note: payment.reason || DISCLOSURES.observed },
-        },
-        "payment_recorded",
-        payment.mode,
-        payment.txId,
-      );
-      return { version: saved.version, operation: saved.data, subscription: doc.data, effective: effectiveSubscription(doc.data, saved.data.state, now) };
-    }
-    if (doc.data.appliedPaymentIds.includes(payment.idempotencyKey)) {
-      return persistEffective(tx, operation, doc.data, now);
-    }
-    const base = Math.max(now, doc.data.currentPeriodEnd ? Date.parse(doc.data.currentPeriodEnd) : now);
-    const nextData: SubscriptionData = {
-      ...doc.data,
-      currentPeriodEnd: new Date(base + doc.data.intervalDays * DAY).toISOString(),
-      appliedPaymentIds: [...doc.data.appliedPaymentIds, payment.idempotencyKey],
-    };
-    await tx.put("subscription", id, nextData, doc.version);
-    const target = operation.data.state === "awaiting_payment" || operation.data.state === "payment_observed" ? "payment_verified" : operation.data.state;
-    const stepped =
-      target === operation.data.state
-        ? operation
-        : await saveOperation(tx, operation, { ...operation.data, state: "payment_verified", payment }, "payment_recorded", payment.mode, payment.txId);
-    const active =
-      stepped.data.state === "completed"
-        ? stepped
-        : await saveOperation(
-            tx,
-            stepped,
-            {
-              ...stepped.data,
-              state: "completed",
-              payment,
-              access: { kind: "subscription", entitled: true, restricted: false, note: "Renewed by a verified payment." },
-            },
-            "renewed",
-            null,
-            payment.txId,
-          );
-    return { version: active.version, operation: active.data, subscription: nextData, effective: effectiveSubscription(nextData, "completed", now) };
-  });
+      return { ...(await applyRenewal(tx, operation, doc, payment, now)), request: null };
+    }),
+  );
 }
+
+// A real renewal payment: seen shows on the record; confirmed extends the period.
+onPayment("renewal", async (tx, request, payment) => {
+  const operation = await mustGet<OperationRecord>(tx, "operation", request.operationId);
+  if (operation.data.state === "cancelled") return;
+  const doc = await mustGet<SubscriptionData>(tx, "subscription", request.operationId);
+  if (payment.status !== "confirmed") {
+    if (operation.data.state === "awaiting_payment") {
+      await saveOperation(tx, operation, { ...operation.data, state: "payment_observed", payment }, "payment_recorded", payment.mode, payment.txId);
+    }
+    return;
+  }
+  await applyRenewal(tx, operation, doc, payment, Date.now());
+});
 
 export async function refreshSubscription(tx: Tx, actor: Actor, id: string, now = Date.now()) {
   const operation = await mustGet<OperationRecord>(tx, "operation", id);
@@ -268,9 +287,15 @@ export async function cancelSubscription(tx: Tx, actor: Actor, id: string, expec
 }
 
 export async function listSubscriptions(tx: Tx, actor: Actor) {
+  const mode = currentMode();
   const rows = await tx.list<SubscriptionData>("subscription");
+  const ops = new Map((await tx.list<OperationRecord>("operation")).filter((op) => op.data.type === "subscription").map((op) => [op.id, op.data]));
   return rows
     .filter((row) => row.data.customerId === actor.user.id || row.data.providerId === actor.user.id)
+    .filter((row) => {
+      const op = ops.get(row.id);
+      return op ? recordMode(op) === mode : mode === "practice";
+    })
     .map((row) => ({
       id: row.id,
       offerId: row.data.offerId,

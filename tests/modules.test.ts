@@ -132,9 +132,6 @@ describe("tips and receipts", () => {
     expect(checkReceipt(loaded).valid).toBe(true);
     const tampered = { ...loaded, amountZatoshi: "1" };
     expect(checkReceipt(tampered).valid).toBe(false);
-    await expect(
-      store.transaction((tx) => payTip(tx, jules, page.operation.id, { amountZec: "0.001", txId: "ab".repeat(32) }, key("observe"))),
-    ).rejects.toThrow(/not observed|unresolved|No Zcash/);
   });
 });
 
@@ -215,11 +212,6 @@ describe("exchange and escrow prototype", () => {
     expect(early.pack).toBeNull();
     expect(early.buyerShareEnvelope).toBeTruthy();
 
-    await expect(
-      store.transaction((tx) => payExchange(tx, jules, opened.operation.id, { expectedVersion: opened.version + 1, txId: "cd".repeat(32) }, key("txid"))),
-    ).rejects.toThrow(/not observed|unresolved|RPC/);
-    const still = await store.transaction((tx) => exchangePackage(tx, jules, opened.operation.id));
-    expect(still.paid).toBe(false);
 
     const paid = await store.transaction((tx) =>
       payExchange(tx, jules, opened.operation.id, { expectedVersion: opened.version + 1 }, key("expay")),

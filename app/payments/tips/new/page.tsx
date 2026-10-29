@@ -2,13 +2,17 @@ import { GuideStart } from "@/components/guide-provider";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { TipForm } from "@/components/tip-desk";
 import { requireActor } from "@/server/current";
-import { runtime } from "@/server/runtime";
+import { pageRead } from "@/server/page-data";
+import { pageRuntime } from "@/server/runtime";
+import { payoutAddress } from "@/services/wallet-keys";
 
 export const metadata = { title: "New tip page" };
 
 export default async function NewTipPage() {
   const actor = await requireActor();
   const allowed = actor.user.role === "creator" || actor.user.role === "operator";
+  const env = await pageRuntime();
+  const payout = env.practice ? null : await pageRead((tx) => payoutAddress(tx, actor.user.id, env.network));
   return (
     <div className="stack">
       <PageHeader
@@ -24,7 +28,7 @@ export default async function NewTipPage() {
           { title: "If payment is unclear", body: "No receipt is issued until ASH accepts the payment record." },
         ]}
       />
-      {allowed ? <TipForm runtime={runtime()} /> : <p className="banner">Sign in as Noor Hale to publish a tip page.</p>}
+      {allowed ? <TipForm runtime={env} payout={payout} /> : <p className="banner">Sign in as Noor Hale to publish a tip page.</p>}
     </div>
   );
 }

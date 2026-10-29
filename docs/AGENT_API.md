@@ -1,5 +1,9 @@
 # Agent API
 
+Send `x-ash-mode: practice | testnet | mainnet` on each request to choose the mode (browsers use the `ash_mode` cookie). The TypeScript SDK takes it as the second constructor argument: `new AshClient(url, "testnet")`.
+
+In testnet and mainnet, the 402 challenge's `extra` includes `paymentRequestRef`, `memo`, and `paymentUri`. Pay `payTo` with that memo from a wallet, then `POST /api/ash/challenges/{id}/pay` (optionally with `{ "txId": "..." }`). It returns a `paymentRef` once the payment is confirmed.
+
 Base path: `/api/ash`. Paid example: `/api/v1/paid/research`.
 
 The SDK is `packages/sdk/src/index.ts`, imported as `@sdk`. It parses `PAYMENT-REQUIRED`, builds `PAYMENT-SIGNATURE`, and stores either a session cookie or a bearer token.

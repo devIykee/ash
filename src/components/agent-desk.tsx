@@ -8,7 +8,7 @@ import { encodePaymentSignature, parsePaymentRequired } from "@sdk";
 import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
 import { useToast } from "./toast";
-import { validTxId, WalletStep } from "./wallet-step";
+import { PaymentPanel, type PaymentRequestView } from "./payment-panel";
 
 export function AgentForm() {
   const router = useRouter();
@@ -120,11 +120,12 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [offer, setOffer] = useState<{ challengeId: string; network: string; amount: string; payTo: string } | null>(null);
-  const [txId, setTxId] = useState("");
+  const [request, setRequest] = useState<PaymentRequestView | null>(null);
 
   async function requestNote() {
     setError("");
     setOutput("");
+    setRequest(null);
     setPending(true);
     try {
       const first = await fetch("/api/v1/paid/research");
@@ -134,12 +135,10 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
       }
       const challenge = parsePaymentRequired(first.headers.get("payment-required"));
       const accept = challenge.accepts[0];
-      setOffer({
-        challengeId: accept.extra.challengeId,
-        network: accept.network,
-        amount: accept.amount,
-        payTo: accept.payTo,
-      });
+      const next = { challengeId: accept.extra.challengeId, network: accept.network, amount: accept.amount, payTo: accept.payTo };
+      setOffer(next);
+      const ref = (accept.extra as { paymentRequestRef?: string | null }).paymentRequestRef;
+      if (ref) setRequest(await api<PaymentRequestView>(`/api/ash/payment-requests/${ref}`));
     } catch (caught) {
       setError(presentError(caught, "We couldn't request the note. No payment was recorded."));
     } finally {
@@ -147,35 +146,25 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
     }
   }
 
+  async function fetchNote(challengeId: string, network: string, body: Record<string, unknown> = {}) {
+    const paid = await api<{ paymentRef: string | null; reason?: string | null }>(`/api/ash/challenges/${challengeId}/pay`, { method: "POST", body });
+    if (!paid.paymentRef) throw new Error(paid.reason || "The payment is not confirmed yet.");
+    const second = await fetch("/api/v1/paid/research", {
+      headers: { "payment-signature": encodePaymentSignature({ challengeId, paymentRef: paid.paymentRef, network }) },
+    });
+    const result = await second.json();
+    if (!second.ok) throw new Error(result.error?.message || "The paid request failed.");
+    setOffer(null);
+    setRequest(null);
+    setOutput(JSON.stringify(result, null, 2));
+  }
+
   async function pay() {
     if (!offer) return;
     setPending(true);
     setError("");
     try {
-      const paid = await api<{ paymentRef: string | null; status: string; reason: string | null }>(`/api/ash/challenges/${offer.challengeId}/pay`, {
-        method: "POST",
-        body: practice ? {} : { txId },
-      });
-      if (!paid.paymentRef) {
-        setOffer(null);
-        setTxId("");
-        setOutput("");
-        setError("A Zcash node sees this transaction, but ASH cannot see a shielded amount, so the note was not released.");
-        return;
-      }
-      const second = await fetch("/api/v1/paid/research", {
-        headers: {
-          "payment-signature": encodePaymentSignature({
-            challengeId: offer.challengeId,
-            paymentRef: paid.paymentRef,
-            network: offer.network,
-          }),
-        },
-      });
-      const body = await second.json();
-      if (!second.ok) throw new Error(body.error?.message || "The paid request failed.");
-      setOffer(null);
-      setOutput(JSON.stringify(body, null, 2));
+      await fetchNote(offer.challengeId, offer.network);
     } catch (caught) {
       setError(presentError(caught, "The paid request did not finish. The note was not returned."));
     } finally {
@@ -185,36 +174,36 @@ export function PaidApiDemo({ practice }: { practice: boolean }) {
 
   return (
     <div className="stack" data-guide="api-demo">
-      <button type="button" onClick={requestNote} disabled={pending}>
-        Request the note
-      </button>
-      <p className="muted">The first response asks for payment and does not include the note. You confirm the amount before ASH records the payment. The same payment reference works once.</p>
+      {request ? null : (
+        <button type="button" onClick={requestNote} disabled={pending}>
+          Request the note
+        </button>
+      )}
+      <p className="muted">
+        {practice
+          ? "The first response asks for payment and does not include the note. You confirm the amount before ASH records the payment. The same payment reference works once."
+          : "The first response is a payment request. Pay it from your wallet. The note comes back once the payment is confirmed on chain, and the payment works once."}
+      </p>
+      {request && offer ? (
+        <PaymentPanel
+          request={request}
+          onConfirmed={() => {
+            void fetchNote(offer.challengeId, offer.network).catch((caught) => setError(presentError(caught, "The paid request did not finish.")));
+          }}
+        />
+      ) : null}
       {output ? <pre>{output}</pre> : null}
       {error ? <p className="alert">{error}</p> : null}
       <ConfirmDialog
-        open={Boolean(offer)}
+        open={Boolean(offer) && practice}
         title="Pay for this request?"
-        body={
-          practice
-            ? `The note costs ${offer ? zatoshiToZec(BigInt(offer.amount)) : ""} ZEC. This records a practice payment for this request only. It is not broadcast, and the reference works once.`
-            : `The note costs ${offer ? zatoshiToZec(BigInt(offer.amount)) : ""} ZEC. Pay it from your wallet, then paste the transaction id.`
-        }
-        confirmLabel={practice ? "Record practice payment" : "Look up transaction"}
-        confirmDisabled={!practice && !validTxId(txId)}
+        body={`The note costs ${offer ? zatoshiToZec(BigInt(offer.amount)) : ""} ZEC. This records a practice payment for this request only. It is not broadcast, and the reference works once.`}
+        confirmLabel="Record practice payment"
         pending={pending}
         onClose={() => setOffer(null)}
         onConfirm={pay}
       >
-        {offer && practice ? <p className="mono address-line">{offer.payTo}</p> : null}
-        {offer && !practice ? (
-          <WalletStep
-            uri={`zcash:${offer.payTo}?amount=${zatoshiToZec(BigInt(offer.amount))}`}
-            address={offer.payTo}
-            amountZec={zatoshiToZec(BigInt(offer.amount))}
-            txId={txId}
-            onTxId={setTxId}
-          />
-        ) : null}
+        {offer ? <p className="mono address-line">{offer.payTo}</p> : null}
       </ConfirmDialog>
     </div>
   );

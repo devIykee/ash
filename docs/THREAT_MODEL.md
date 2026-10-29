@@ -60,7 +60,7 @@ Controls: simulated mode only settles through `settleSimulated`. A transaction i
 
 Residual: anyone who can write the database can insert a ledger row. The simulated adapter will satisfy policy for anyone the server trusts, by design, and it labels that fact.
 
-Tests: `paymentSatisfies` unit tests, tip observation rejection, exchange observation rejection, x402 reference mismatch.
+Tests: `paymentSatisfies` unit tests, real-payment flows on both networks with wrong memos, short amounts, forged commitments, unconfirmed and reused outputs, and x402 reference mismatch.
 
 Unsupported: proving a shielded amount to ASH without a viewing key or a wallet integration. That integration is not in this build.
 
@@ -84,7 +84,7 @@ Attacker: a failed attempt followed by a naive retry that pays twice, or a compl
 
 Controls: line states, attempt counter, ledger key `{lineId}:{attempt}`, completion guard, failed versus rejected versus verified.
 
-Residual: chain mode currently observes a placeholder id when a line has no transaction id, so those lines fail or stay unresolved. There is no wallet batch builder.
+Residual: a payroll line is confirmed only from the operator's outgoing notes, so payments sent from a different wallet account do not count. ASH trusts lightwalletd for block heights.
 
 Tests: payroll module test.
 

@@ -54,7 +54,7 @@ sequenceDiagram
   ASH->>User: Receipt, package, or still waiting
 ```
 
-`paymentSatisfies` is the only gate for release, API fulfillment, subscription extension, and payroll completion. Chain observation returns `observed` or `unresolved`. It never returns `verified` or `confirmed`.
+`paymentSatisfies` is the only gate for release, API fulfillment, subscription extension, and payroll completion. Chain verification returns `observed` until the payment has the required confirmations, then `confirmed`. Only a confirmed note that decrypts to the payee's key and matches its commitment, amount, and memo reference satisfies a release.
 
 The simulated ledger key is the idempotency key of that attempt. A repeated key returns the stored result and does not charge an agent budget twice. `failNextPayment` writes a rejected row without a charge so a later attempt can use a new key.
 
@@ -77,7 +77,7 @@ An operator mints `ash_{prefix}_{secret}`. ASH stores only SHA-256 of the token.
 ## External dependencies
 
 - A Zcash wallet, outside ASH, if someone pays a ZIP-321 URI.
-- An optional Zcash node JSON-RPC URL for observation.
+- lightwalletd (testnet and mainnet) for compact blocks and raw transactions.
 - Postgres for any multi-instance host.
 
 No lightwalletd, no wallet SDK, and no spending keys are linked in this build.

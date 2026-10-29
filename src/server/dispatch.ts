@@ -31,8 +31,8 @@ import {
   getPayroll,
   listPayroll,
   payrollReport,
-  recordPayrollLine,
   retryPayrollLine,
+  verifyPayrollTransaction,
 } from "@/services/payroll";
 import {
   cancelSubscription,
@@ -44,10 +44,13 @@ import {
   subscribe,
 } from "@/services/subscriptions";
 import { createTip, getReceipt, getTip, listTips, payTip } from "@/services/tips";
-import { payChallenge } from "@/services/x402";
+import { checkChallengePayment, payChallenge } from "@/services/x402";
+import { checkPaymentRequest, getPaymentRequest, publicRequest } from "@/services/payment-requests";
+import { listWalletKeys, removeWalletKey, saveWalletKey } from "@/services/wallet-keys";
 import { resolveActor } from "./actor";
 import { clearSessionCookie, sessionCookie, signSession } from "./auth";
-import { config, payToStatus } from "./config";
+import { config } from "./config";
+import { allowedModes, defaultMode, modeCookie, modeFromRequest, resolveMode, withMode } from "./mode";
 import { assertSameOrigin, errorResponse, idempotencyKey, json, parseBody, readJson } from "./http";
 import { rateLimit } from "./rate-limit";
 import { getStore } from "./store";
@@ -84,21 +87,21 @@ function clientKey(req: Request): string {
 export function healthBody() {
   const cfg = config();
   const storeKind = getStore().kind;
-  const payTo = payToStatus(cfg);
   return {
     service: "ash",
-    status: cfg.usingDevSecrets || storeKind === "unconfigured" || !payTo.ok ? "degraded" : "ok",
+    status: cfg.usingDevSecrets || storeKind === "unconfigured" ? "degraded" : "ok",
+    mode: cfg.mode,
+    modes: allowedModes(),
+    defaultMode: defaultMode(),
     network: cfg.network,
     paymentMode: cfg.paymentMode,
     adapterMode: cfg.adapterMode,
     allowSimulated: cfg.allowSimulated,
     requiredConfirmations: cfg.requiredConfirmations,
+    lightwalletd: { testnet: config("testnet").lightwalletdUrl, mainnet: config("mainnet").lightwalletdUrl },
     usingDevSecrets: cfg.usingDevSecrets,
+    viewingKeySecretSet: Boolean(process.env.VIEWING_KEY_SECRET),
     store: storeKind,
-    payToConfigured: payTo.ok,
-    payToIsFixture: payTo.ok && payTo.fixture,
-    payToProblem: payTo.ok ? null : payTo.reason,
-    rpcConfigured: Boolean(cfg.rpcUrl),
     personas: PERSONAS.map((person) => ({ id: person.id, name: person.name, role: person.role })),
   };
 }
@@ -123,6 +126,31 @@ async function route(ctx: Ctx): Promise<Response> {
   }
   if (root === "session" && method === "GET" && !id) {
     return json({ user: actor ? { id: actor.user.id, name: actor.user.name, role: actor.user.role, kind: actor.kind } : null });
+  }
+
+  if (root === "mode" && method === "GET") {
+    return json({ mode: config().mode, modes: allowedModes() });
+  }
+  if (root === "mode" && method === "POST") {
+    const body = parseBody(z.object({ mode: z.enum(["practice", "testnet", "mainnet"]) }).strict(), await readJson(req));
+    if (!allowedModes().includes(body.mode)) throw new AshError("forbidden", `This deployment does not offer ${body.mode}.`, 403);
+    return json({ mode: body.mode }, 200, { "set-cookie": modeCookie(resolveMode(body.mode)) });
+  }
+
+  if (root === "wallet-keys" && method === "GET") return json({ items: await listWalletKeys(tx, requireActor(actor)) });
+  if (root === "wallet-keys" && method === "POST") {
+    const body = parseBody(
+      z.object({ network: z.enum(["testnet", "mainnet"]), address: z.string().trim().min(10).max(1024), viewingKey: z.string().trim().min(20).max(2048) }).strict(),
+      await readJson(req),
+    );
+    return json({ key: await saveWalletKey(tx, requireActor(actor), body) }, 201);
+  }
+  if (root === "wallet-keys" && method === "DELETE" && (id === "testnet" || id === "mainnet")) {
+    return json(await removeWalletKey(tx, requireActor(actor), id));
+  }
+
+  if (root === "payment-requests" && method === "GET" && id && !action) {
+    return json(publicRequest(await getPaymentRequest(tx, id)));
   }
 
   if (root === "overview" && method === "GET") {
@@ -181,13 +209,6 @@ async function route(ctx: Ctx): Promise<Response> {
   }
   if (root === "payroll" && method === "POST" && id && action === "lines" && extra) {
     const lineAction = segments[4];
-    if (lineAction === "record") {
-      const recorded = parseBody(
-        z.object({ expectedVersion: z.number().int().positive(), txId: txIdSchema }).strict(),
-        await readJson(req),
-      );
-      return json(await recordPayrollLine(tx, requireActor(actor), id, extra, recorded.expectedVersion, recorded.txId));
-    }
     const body = parseBody(versionBody, await readJson(req));
     if (lineAction === "retry") return json(await retryPayrollLine(tx, requireActor(actor), id, extra, body.expectedVersion));
     if (lineAction === "cancel") return json(await cancelPayrollLine(tx, requireActor(actor), id, extra, body.expectedVersion));
@@ -216,7 +237,6 @@ async function route(ctx: Ctx): Promise<Response> {
           amountZec: z.string().max(20),
           memo: z.string().max(512).optional(),
           includeMemo: z.boolean().optional(),
-          txId: txIdSchema.optional(),
         })
         .strict(),
       await readJson(req),
@@ -229,8 +249,7 @@ async function route(ctx: Ctx): Promise<Response> {
   if (root === "receipts" && method === "GET" && id) return json(await getReceipt(tx, id));
 
   if (root === "challenges" && method === "POST" && id && action === "pay") {
-    const body = parseBody(z.object({ txId: txIdSchema.optional() }).strict(), await readJson(req));
-    return json(await payChallenge(tx, requireActor(actor), id, body));
+    return json(await payChallenge(tx, requireActor(actor), id));
   }
 
   if (root === "offers" && method === "POST" && !id) {
@@ -296,15 +315,7 @@ async function route(ctx: Ctx): Promise<Response> {
     return json(await releaseExchange(tx, requireActor(actor), id, body));
   }
   if (root === "exchanges" && method === "POST" && id && action === "pay") {
-    const body = parseBody(
-      z
-        .object({
-          expectedVersion: z.number().int().positive(),
-          txId: txIdSchema.optional(),
-        })
-        .strict(),
-      await readJson(req),
-    );
+    const body = parseBody(versionBody, await readJson(req));
     return json(await payExchange(tx, requireActor(actor), id, body, key));
   }
   if (root === "exchanges" && method === "POST" && id && action === "fail") {
@@ -364,11 +375,8 @@ async function route(ctx: Ctx): Promise<Response> {
     return json(await subscribe(tx, requireActor(actor), body.offerId, key), 201);
   }
   if (root === "subscriptions" && method === "POST" && id && action === "renew") {
-    const body = parseBody(
-      z.object({ expectedVersion: z.number().int().positive(), txId: txIdSchema.optional() }).strict(),
-      await readJson(req),
-    );
-    return json(await renewSubscription(tx, requireActor(actor), id, body.expectedVersion, key, Date.now(), body.txId));
+    const body = parseBody(versionBody, await readJson(req));
+    return json(await renewSubscription(tx, requireActor(actor), id, body.expectedVersion, key));
   }
   if (root === "subscriptions" && method === "POST" && id && action === "refresh") {
     return json(await refreshSubscription(tx, requireActor(actor), id));
@@ -428,13 +436,45 @@ async function route(ctx: Ctx): Promise<Response> {
   throw new AshError("not_found", "Unknown ASH route.", 404);
 }
 
-export async function handleAsh(req: Request, segments: string[]): Promise<Response> {
-  try {
-    rateLimit(`${clientKey(req)}:${req.method}:${segments[0] ?? "root"}`);
-    if (req.method !== "GET" && req.method !== "HEAD") assertSameOrigin(req);
-    if (segments[0] === "health" && req.method === "GET") return json(healthBody());
-    return await getStore().transaction(async (tx) => route({ req, tx, actor: await resolveActor(tx, req), segments }));
-  } catch (error) {
-    return errorResponse(error);
+const txBody = z.object({ txId: txIdSchema.optional() }).strict();
+
+/** Routes that talk to the Zcash network. They run outside any database transaction. */
+async function networkRoute(req: Request, segments: string[]): Promise<Response | null> {
+  const [root, id, action] = segments;
+  if (req.method !== "POST" || !id) return null;
+  if (root === "payment-requests" && action === "check") {
+    const body = parseBody(txBody, await readJson(req));
+    return json(await checkPaymentRequest(id, body.txId));
   }
+  if (root === "challenges" && action === "pay") {
+    const store = getStore();
+    const actor = await store.read((tx) => resolveActor(tx, req));
+    const challenge = await store.read((tx) => tx.get<{ requestRef?: string | null }>("challenge", id));
+    if (!challenge?.data.requestRef) return null;
+    requireActor(actor);
+    const body = parseBody(txBody, await readJson(req));
+    return json(await checkChallengePayment((fn) => store.read(fn), id, body.txId));
+  }
+  if (root === "payroll" && action === "verify") {
+    const store = getStore();
+    const actor = requireActor(await store.read((tx) => resolveActor(tx, req)));
+    const body = parseBody(z.object({ txId: txIdSchema }).strict(), await readJson(req));
+    return json(await verifyPayrollTransaction(actor, id, body.txId));
+  }
+  return null;
+}
+
+export async function handleAsh(req: Request, segments: string[]): Promise<Response> {
+  return withMode(modeFromRequest(req), async () => {
+    try {
+      rateLimit(`${clientKey(req)}:${req.method}:${segments[0] ?? "root"}`);
+      if (req.method !== "GET" && req.method !== "HEAD") assertSameOrigin(req);
+      if (segments[0] === "health" && req.method === "GET") return json(healthBody());
+      const network = await networkRoute(req, segments);
+      if (network) return network;
+      return await getStore().transaction(async (tx) => route({ req, tx, actor: await resolveActor(tx, req), segments }));
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
 }

@@ -9,6 +9,7 @@ import { storage } from "@/client/storage";
 import { presentError } from "./labels";
 import { useToast } from "./toast";
 import { addressPlaceholder, sampleAddress, type Runtime } from "./runtime";
+import { PayoutNotice } from "./payout-notice";
 
 type Source = { kind: "text" } | { kind: "file"; name: string; bytes: Uint8Array };
 
@@ -16,7 +17,7 @@ function sizeLabel(bytes: number): string {
   return bytes < 1024 ? `${bytes} bytes` : `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
-export function OfferForm({ runtime }: { runtime: Runtime }) {
+export function OfferForm({ runtime, payout = null }: { runtime: Runtime; payout?: string | null }) {
   const router = useRouter();
   const toast = useToast();
   const fixture = sampleAddress(runtime);
@@ -30,7 +31,7 @@ export function OfferForm({ runtime }: { runtime: Runtime }) {
   const [pending, setPending] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
-  const payToRequired = !runtime.practice;
+  const payToRequired = false;
 
   async function pick(event: ChangeEvent<HTMLInputElement>) {
     setError("");
@@ -63,7 +64,7 @@ export function OfferForm({ runtime }: { runtime: Runtime }) {
           title,
           description,
           priceZec: price,
-          payTo: payTo.trim() || undefined,
+          payTo: runtime.practice ? payTo.trim() || undefined : undefined,
           fileName: source.kind === "file" ? source.name.slice(0, 120) : undefined,
           plaintextSha256: encrypted.pack.plaintextSha256,
           pack: encrypted.pack,
@@ -137,7 +138,8 @@ export function OfferForm({ runtime }: { runtime: Runtime }) {
         Price in ZEC
         <input value={price} onChange={(event) => setPrice(event.target.value)} required inputMode="decimal" />
       </label>
-      <label>
+      {runtime.practice ? null : <PayoutNotice runtime={runtime} payout={payout} />}
+      <label hidden={!runtime.practice}>
         Shielded address that receives payment{payToRequired ? "" : " (optional)"}
         <input value={payTo} onChange={(event) => setPayTo(event.target.value.trim())} spellCheck={false} autoComplete="off" placeholder={addressPlaceholder(runtime)} required={payToRequired} />
         <span className="field-hint">
@@ -168,7 +170,7 @@ export function OfferForm({ runtime }: { runtime: Runtime }) {
         )}
         <span className="field-hint">This stays on this device until you encrypt it. Browser storage is not a backup.</span>
       </div>
-      <button type="submit" data-guide="offer-publish">
+      <button type="submit" data-guide="offer-publish" disabled={!runtime.practice && !payout}>
         Review and encrypt
       </button>
       {error ? <p className="alert">{error}</p> : null}

@@ -7,8 +7,14 @@ import { proveAmountSum, verifyAmountSum, type SumProof } from "@/crypto/pederse
 import { config } from "@/server/config";
 import { assertShieldedDestination } from "@/zcash/address";
 import type { Tx } from "@/store/types";
-import { assertParticipant, assertPerson, assertRole, assertScope, idempotent, mustGet, requestHash, settleObserved, settleSimulated, type Actor } from "./common";
+import { assertParticipant, assertPerson, assertRole, assertScope, idempotent, mustGet, requestHash, settleSimulated, type Actor } from "./common";
 import { createOperation, saveOperation } from "./events";
+import { verifyingKey } from "./wallet-keys";
+import { getStore } from "@/server/store";
+import { currentMode, recordMode, withMode } from "@/server/mode";
+import { LightwalletdError } from "@/zcash/lightwalletd";
+import { saplingReceiver } from "@/zcash/unified";
+import { checkOutgoing } from "@/zcash/verify";
 
 export type PayrollLine = {
   id: string;
@@ -93,6 +99,10 @@ export async function createPayroll(
       try {
         const report = assertShieldedDestination(line.address, cfg.network);
         base.addressKind = report.kind;
+        if (!cfg.allowSimulated) {
+          const receiver = saplingReceiver(line.address);
+          if (!receiver.sapling) errors.push({ index, message: "ASH verifies Sapling payments. Use a Sapling address, or a unified address that includes Sapling." });
+        }
         if (seen.has(base.address)) errors.push({ index, message: "Duplicate recipient address." });
         seen.add(base.address);
       } catch (error) {
@@ -231,50 +241,78 @@ export async function retryPayrollLine(tx: Tx, actor: Actor, id: string, lineId:
   return { version: saved.version, operation: saved.data, payroll: paid };
 }
 
-// Wallet-payment (chain) mode: the operator paid a line from a wallet and reports the transaction id.
-export async function recordPayrollLine(tx: Tx, actor: Actor, id: string, lineId: string, expectedVersion: number, txId: string) {
+/**
+ * Real modes: the operator paid lines from their wallet and gives ASH the transaction id.
+ * ASH recovers the wallet's outgoing notes with its full viewing key and marks each line paid
+ * when a note to that line's Sapling address carries at least its amount. Runs outside a
+ * database transaction, then writes the result in one.
+ */
+export async function verifyPayrollTransaction(actor: Actor, id: string, txId: string) {
   assertPerson(actor);
   assertRole(actor, ["operator"]);
-  const current = await mustGet<OperationRecord>(tx, "operation", id);
-  if (current.version !== expectedVersion) throw new AshError("conflict", "The run changed. Reload it and try again.", 409);
-  if (current.data.initiatorId !== actor.user.id) throw new AshError("forbidden", "You cannot change this run.", 403);
-  if (!["authorized", "executing", "partially_completed", "failed"].includes(current.data.state)) {
-    throw new AshError("invalid_state", "Authorize the run before recording payments.", 409);
-  }
-  const payroll = await mustGet<PayrollData>(tx, "payroll", id);
-  const lines = payroll.data.lines.map((line) => ({ ...line }));
-  const line = lines.find((item) => item.id === lineId);
-  if (!line || !["ready", "failed"].includes(line.state)) {
-    throw new AshError("invalid_state", "Only a line that has not been recorded can take a transaction id.", 409);
-  }
-  if (line.state === "failed") line.attempt += 1;
-  const payment = await settleObserved(tx, {
-    idempotencyKey: `${line.id}:${line.attempt}:${txId}`,
-    txId,
-    amountZatoshi: line.amountZatoshi,
-    feeZatoshi: line.feeZatoshi,
+  const store = getStore();
+  const loaded = await store.read(async (tx) => {
+    const current = await mustGet<OperationRecord>(tx, "operation", id);
+    if (current.data.initiatorId !== actor.user.id) throw new AshError("forbidden", "You cannot change this run.", 403);
+    return withMode(recordMode(current.data), async () => {
+      const cfg = config();
+      if (cfg.allowSimulated) throw new AshError("invalid_state", "Practice runs record practice payments. Use Record practice payments.", 409);
+      if (!["authorized", "executing", "partially_completed", "failed"].includes(current.data.state)) {
+        throw new AshError("invalid_state", "Approve the run before recording payments.", 409);
+      }
+      const payroll = await mustGet<PayrollData>(tx, "payroll", id);
+      const key = await verifyingKey(tx, actor.user.id, cfg.network);
+      if (!key) throw new AshError("payee_key_missing", `Add your ${cfg.network} wallet address and full viewing key in Settings, so ASH can confirm payments you send.`, 409);
+      if (!key.ovk) throw new AshError("invalid_key", "Confirming payments you send needs a full viewing key (uview or zxview), not an incoming one. Update it in Settings.", 409);
+      return { cfg, payroll: payroll.data, ovk: key.ovk };
+    });
   });
-  line.txId = payment.txId;
-  line.paymentMode = payment.mode;
-  if (paymentSatisfies(payment, config().allowSimulated)) {
-    line.state = "verified";
-    line.error = null;
-  } else if (payment.status === "observed") {
-    line.state = "observed";
-    line.error = payment.reason;
-  } else {
-    line.state = "failed";
-    line.error = payment.reason || "The transaction was not observed.";
+  const pending = loaded.payroll.lines.filter((line) => ["ready", "failed", "observed"].includes(line.state));
+  const lines = pending.flatMap((line) => {
+    const receiver = saplingReceiver(line.address);
+    return receiver.sapling ? [{ id: line.id, address: receiver.sapling, minZatoshi: BigInt(line.amountZatoshi) }] : [];
+  });
+  let outcome: Awaited<ReturnType<typeof checkOutgoing>>;
+  try {
+    outcome = await checkOutgoing(loaded.cfg.lightwalletdUrl, txId.toLowerCase(), loaded.ovk, lines);
+  } catch (error) {
+    if (error instanceof LightwalletdError) throw new AshError("network_unavailable", `ASH could not reach the Zcash ${loaded.cfg.network} network. ${error.message}`, 503);
+    throw error;
   }
-  const started =
-    current.data.state === "executing"
-      ? current
-      : await saveOperation(tx, current, { ...current.data, state: "executing" }, "executing", "wallet payment recorded");
-  const state = deriveState(lines);
-  assertCompletable(lines, state);
-  await tx.put("payroll", id, { ...payroll.data, lines }, payroll.version);
-  const saved = await saveOperation(tx, started, { ...started.data, state }, state, "line recorded", payment.txId);
-  return { version: saved.version, operation: saved.data, payroll: { ...payroll.data, lines } };
+  if (outcome.status !== "found") throw new AshError("payment_unverified", outcome.reason, 402);
+  if (outcome.matches.length === 0) {
+    throw new AshError("payment_unverified", "This transaction does not pay any unpaid line from your wallet. Check that it was sent from the account whose viewing key you added.", 402);
+  }
+  return store.transaction(async (tx) =>
+    withMode(loaded.cfg.mode, async () => {
+      const current = await mustGet<OperationRecord>(tx, "operation", id);
+      const payroll = await mustGet<PayrollData>(tx, "payroll", id);
+      const nextLines = payroll.data.lines.map((line) => ({ ...line }));
+      const confirmed = outcome.confirmations >= loaded.cfg.requiredConfirmations;
+      for (const match of outcome.matches) {
+        const line = nextLines.find((item) => item.id === match.lineId);
+        if (!line || line.state === "verified" || line.state === "cancelled") continue;
+        const outputKey = `${loaded.cfg.network}:${txId.toLowerCase()}:${match.outputIndex}`;
+        const used = await tx.get<{ ref: string }>("used_output", outputKey);
+        if (used && used.data.ref !== `${id}:${line.id}`) continue;
+        if (!used) await tx.put("used_output", outputKey, { ref: `${id}:${line.id}` }, null);
+        line.txId = txId.toLowerCase();
+        line.paymentMode = "chain_verified";
+        line.state = confirmed ? "verified" : "observed";
+        line.error = confirmed
+          ? null
+          : outcome.height === null
+            ? "Seen in the mempool. Record the same transaction again after it is mined."
+            : `${outcome.confirmations} of ${loaded.cfg.requiredConfirmations} confirmations. Record it again shortly.`;
+      }
+      const started = current.data.state === "executing" ? current : await saveOperation(tx, current, { ...current.data, state: "executing" }, "executing", "wallet payment recorded");
+      const state = deriveState(nextLines);
+      assertCompletable(nextLines, state);
+      await tx.put("payroll", id, { ...payroll.data, lines: nextLines }, payroll.version);
+      const saved = await saveOperation(tx, started, { ...started.data, state }, state, "verified on chain", txId.toLowerCase());
+      return { version: saved.version, operation: saved.data, payroll: { ...payroll.data, lines: nextLines }, matched: outcome.matches.length, confirmations: outcome.confirmations };
+    }),
+  );
 }
 
 export async function cancelPayrollLine(tx: Tx, actor: Actor, id: string, lineId: string, expectedVersion: number) {
@@ -332,6 +370,7 @@ export async function payrollReport(tx: Tx, actor: Actor, id: string, view: "ope
     operationId: id,
     label: current.data.label,
     state: current.data.state,
+    mode: recordMode(current.data),
     currency: "zatoshi",
     totalAmountZatoshi: totalAmount.toString(),
     totalFeeZatoshi: totalFee.toString(),
@@ -361,8 +400,9 @@ export async function getPayroll(tx: Tx, actor: Actor, id: string) {
 
 export async function listPayroll(tx: Tx, actor: Actor) {
   const ops = await tx.list<OperationRecord>("operation");
+  const mode = currentMode();
   return ops
-    .filter((item) => item.data.type === "payroll_run")
+    .filter((item) => item.data.type === "payroll_run" && recordMode(item.data) === mode)
     .filter((item) => actor.user.role === "auditor" || item.data.initiatorId === actor.user.id)
     .map((item) => ({
       id: item.id,

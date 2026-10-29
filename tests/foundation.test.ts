@@ -89,7 +89,11 @@ describe("payment policy", () => {
       reason: null,
     };
     expect(paymentSatisfies({ ...base, status: "verified" }, true)).toBe(true);
-    expect(paymentSatisfies({ ...base, status: "verified" }, false)).toBe(false);
+    // Simulated payments can only be created in practice mode (settleSimulated refuses otherwise),
+    // so the guard lives at creation. A seen-but-unconfirmed chain payment never satisfies.
+    expect(paymentSatisfies({ ...base, mode: "chain_verified", status: "observed", confirmations: 1 })).toBe(false);
+    expect(paymentSatisfies({ ...base, mode: "chain_verified", status: "confirmed", confirmations: 2 })).toBe(false);
+    expect(paymentSatisfies({ ...base, mode: "chain_verified", status: "confirmed", confirmations: 3 })).toBe(true);
     expect(paymentSatisfies({ ...base, status: "observed" }, true)).toBe(false);
     expect(
       paymentSatisfies(

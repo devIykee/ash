@@ -54,7 +54,7 @@ Subscriptions move `completed` → `grace` → `expired` from the period clock. 
 ## Recovery
 
 - Failed payroll line: retry, which increments `attempt`, or cancel that line. A verified line cannot be cancelled.
-- Unobserved transaction id: the exchange stays unpaid. Configure a node or use the simulated adapter.
+- Unconfirmed or unmatched payment: the exchange stays unpaid. The payment panel shows why (wrong memo, short amount, or not yet confirmed).
 - Delivery failure after an accepted payment: the buyer reports failure and may fetch share 3. Share 3 plus share 1 reconstructs the key. This is not a refund. A refund would be a new outgoing payment.
 - Expired API challenge: request the resource again. The old reference cannot be reused.
 - Expired grant: ASH stops treating the application as active. A viewing key that was shared outside ASH still works.

@@ -5,7 +5,6 @@ import { AshError } from "@/domain/errors";
 import { paymentResult } from "@/domain/payment";
 import { DISCLOSURES, type PaymentRecord, type Role, type User } from "@/domain/types";
 import { config } from "@/server/config";
-import { observeTransaction } from "@/zcash/chain";
 import type { Tx } from "@/store/types";
 
 export type AgentToken = {
@@ -157,33 +156,6 @@ export async function settleSimulated(
     confirmations: null,
   };
   await tx.put("payment_ledger", input.idempotencyKey, ledger, null);
-  return ledgerToPayment(ledger, input.idempotencyKey);
-}
-
-export async function settleObserved(
-  tx: Tx,
-  input: { idempotencyKey: string; txId: string; amountZatoshi: string; feeZatoshi: string },
-): Promise<PaymentRecord> {
-  const cfg = config();
-  const existing = await tx.get<Ledger>("payment_ledger", input.idempotencyKey);
-  if (existing && existing.data.status !== "unresolved") return ledgerToPayment(existing.data, input.idempotencyKey);
-  const observation = await observeTransaction({
-    txId: input.txId,
-    rpcUrl: cfg.rpcUrl,
-    rpcUser: cfg.rpcUser,
-    rpcPassword: cfg.rpcPassword,
-  });
-  const ledger: Ledger = {
-    status: observation.status === "observed" ? "observed" : "unresolved",
-    mode: "chain_observation",
-    txId: input.txId,
-    amountZatoshi: input.amountZatoshi,
-    feeZatoshi: input.feeZatoshi,
-    reason: observation.reason,
-    confirmations: observation.confirmations,
-  };
-  if (existing) await tx.put("payment_ledger", input.idempotencyKey, ledger, existing.version);
-  else await tx.put("payment_ledger", input.idempotencyKey, ledger, null);
   return ledgerToPayment(ledger, input.idempotencyKey);
 }
 

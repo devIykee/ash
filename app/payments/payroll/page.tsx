@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
@@ -7,13 +8,12 @@ import { relativeTime } from "@/components/format";
 import { RecordList } from "@/components/record-list";
 import { listPayroll } from "@/services/payroll";
 import { requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Contractor payments" };
 
 export default async function PayrollListPage() {
   const actor = await requireActor();
-  const runs = await getStore().read((tx) => listPayroll(tx, actor));
+  const runs = await pageRead((tx) => listPayroll(tx, actor));
   return (
     <div className="stack">
       <PageHeader

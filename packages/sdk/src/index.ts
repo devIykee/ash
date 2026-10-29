@@ -56,12 +56,17 @@ export class AshClient {
   cookie = "";
   token = "";
 
-  constructor(readonly baseUrl: string) {}
+  /** mode: "practice", "testnet", or "mainnet". Sent as x-ash-mode on every request. */
+  constructor(
+    readonly baseUrl: string,
+    public mode: string | null = null,
+  ) {}
 
   private headers(extra: Record<string, string> = {}, body?: unknown): Headers {
     const headers = new Headers(extra);
     if (body !== undefined) headers.set("content-type", "application/json");
     if (this.token) headers.set("authorization", `Bearer ${this.token}`);
+    if (this.mode) headers.set("x-ash-mode", this.mode);
     if (this.cookie) headers.set("cookie", this.cookie);
     return headers;
   }

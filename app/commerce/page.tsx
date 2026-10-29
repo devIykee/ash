@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { ArrowLeftRight, FileLock2, Plus } from "lucide-react";
 import { recordLabel } from "@/components/labels";
 import Link from "next/link";
@@ -10,13 +11,12 @@ import { zatoshiToZec } from "@/domain/money";
 import { listOffers } from "@/services/exchange";
 import { listOperations } from "@/services/overview";
 import { currentActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Exchange" };
 
 export default async function CommercePage() {
   const actor = await currentActor();
-  const { offers, exchanges } = await getStore().read(async (tx) => ({
+  const { offers, exchanges } = await pageRead(async (tx) => ({
     offers: await listOffers(tx),
     exchanges: actor ? (await listOperations(tx, actor)).filter((item) => item.type === "data_exchange") : [],
   }));

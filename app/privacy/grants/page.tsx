@@ -1,3 +1,4 @@
+import { pageTransaction } from "@/server/page-data";
 import { GrantForm, WithdrawGrant } from "@/components/grant-desk";
 import { GuideStart } from "@/components/guide-provider";
 import { capabilityLabel, stateLabel } from "@/components/labels";
@@ -5,13 +6,12 @@ import { EmptyState } from "@/components/empty-state";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { getGrant, listGrants } from "@/services/grants";
 import { requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Audit access" };
 
 export default async function GrantsPage() {
   const actor = await requireActor();
-  const grants = await getStore().transaction(async (tx) => {
+  const grants = await pageTransaction(async (tx) => {
     const items = await listGrants(tx, actor);
     return Promise.all(items.map(async (item) => ({ item, detail: await getGrant(tx, actor, item.id) })));
   });

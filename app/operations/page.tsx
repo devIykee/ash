@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { recordLabel } from "@/components/labels";
 import { History, ShieldCheck } from "lucide-react";
 import Link from "next/link";
@@ -9,13 +10,12 @@ import { relativeTime } from "@/components/format";
 import { RecordList } from "@/components/record-list";
 import { listOperations } from "@/services/overview";
 import { requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Activity" };
 
 export default async function OperationsPage() {
   const actor = await requireActor();
-  const items = await getStore().read((tx) => listOperations(tx, actor));
+  const items = await pageRead((tx) => listOperations(tx, actor));
   return (
     <div className="stack">
       <PageHeader

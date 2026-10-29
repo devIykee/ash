@@ -38,6 +38,10 @@ export const OPERATION_STATES = [
 export type OperationState = (typeof OPERATION_STATES)[number];
 
 export type Network = "mainnet" | "testnet";
+
+/** Practice records labeled payments locally. Testnet and mainnet verify real shielded payments. */
+export type Mode = "practice" | "testnet" | "mainnet";
+export const MODES: readonly Mode[] = ["practice", "testnet", "mainnet"];
 export type Role = "operator" | "creator" | "buyer" | "auditor";
 
 export type PaymentStatus =
@@ -49,7 +53,7 @@ export type PaymentStatus =
   | "rejected"
   | "unresolved";
 
-export type PaymentMode = "simulated" | "chain_observation";
+export type PaymentMode = "simulated" | "chain_observation" | "chain_verified";
 
 export type PaymentRecord = {
   status: PaymentStatus;
@@ -85,6 +89,8 @@ export type OperationRecord = {
   disclosures: string[];
   payment: PaymentRecord | null;
   access: AccessRecord | null;
+  /** Which workspace this record belongs to. Older records without it are practice records. */
+  mode?: Mode;
 };
 
 export type AshEvent = {

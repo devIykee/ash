@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { HandCoins, Plus } from "lucide-react";
 import { RecordList } from "@/components/record-list";
 import Link from "next/link";
@@ -5,13 +6,12 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { listTips } from "@/services/tips";
 import { currentActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Tips" };
 
 export default async function TipsPage() {
   const actor = await currentActor();
-  const tips = actor ? await getStore().read((tx) => listTips(tx, actor)) : [];
+  const tips = actor ? await pageRead((tx) => listTips(tx, actor)) : [];
   const canPublish = actor?.user.role === "creator" || actor?.user.role === "operator";
   return (
     <div className="stack">

@@ -3,7 +3,8 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { GuideProvider } from "./guide-provider";
-import { MobileBar, Sidebar, TabBar } from "./nav";
+import { ModeBanner } from "./mode-switch";
+import { MobileBar, MobileMode, Sidebar, TabBar } from "./nav";
 import { NavProgress } from "./nav-progress";
 import type { Runtime } from "./runtime";
 import { ToastProvider } from "./toast";
@@ -32,6 +33,8 @@ export function Shell({ user, runtime, children }: { user: { id: string; name: s
           <Sidebar user={user} runtime={runtime} />
           <div className="app-body">
             <MobileBar user={user} runtime={runtime} />
+            <ModeBanner runtime={runtime} />
+            <MobileMode runtime={runtime} />
             <main className={pathname.startsWith("/docs") ? "main wide" : "main"} id="content">
               {children}
             </main>

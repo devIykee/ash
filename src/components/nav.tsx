@@ -3,6 +3,7 @@
 import {
   Bot,
   BookOpen,
+  KeyRound,
   FileLock2,
   History,
   LayoutDashboard,
@@ -14,7 +15,8 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PersonaSwitch } from "./persona-switch";
-import { modeLabel, networkLabel, type Runtime } from "./runtime";
+import { ModeSwitch } from "./mode-switch";
+import { type Runtime } from "./runtime";
 import { ThemeToggle } from "./theme-toggle";
 
 type User = { id: string; name: string; role: string } | null;
@@ -29,6 +31,7 @@ const MAIN: NavItem[] = [
 ];
 
 const MORE: NavItem[] = [
+  { href: "/settings", label: "Receiving keys", icon: KeyRound },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/help", label: "Help", icon: LifeBuoy, guide: "help-link" },
   { href: "/docs", label: "Docs", icon: BookOpen },
@@ -37,20 +40,6 @@ const MORE: NavItem[] = [
 function isCurrent(pathname: string, href: string): boolean {
   if (href === "/payments" && pathname.startsWith("/payments")) return true;
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function EnvBadge({ runtime }: { runtime: Runtime }) {
-  return (
-    <Link
-      className="env-badge"
-      href="/help#network"
-      data-network={runtime.network}
-      title={runtime.practice ? "Payments are recorded as practice and never broadcast." : "You pay from your own wallet. ASH looks up the transaction id."}
-    >
-      <span>{networkLabel(runtime)}</span>
-      <span className="env-mode">{modeLabel(runtime)}</span>
-    </Link>
-  );
 }
 
 function Brand() {
@@ -83,7 +72,7 @@ export function Sidebar({ user, runtime }: { user: User; runtime: Runtime }) {
     <aside className="sidebar" aria-label="Workspace">
       <div className="sidebar-top">
         <Brand />
-        <EnvBadge runtime={runtime} />
+        <ModeSwitch runtime={runtime} />
       </div>
       <nav className="side-nav" aria-label="Main">
         {MAIN.map((item) => (
@@ -107,11 +96,10 @@ export function Sidebar({ user, runtime }: { user: User; runtime: Runtime }) {
   );
 }
 
-export function MobileBar({ user, runtime }: { user: User; runtime: Runtime }) {
+export function MobileBar({ user }: { user: User; runtime?: Runtime }) {
   return (
     <header className="mobile-bar">
       <Brand />
-      <EnvBadge runtime={runtime} />
       <span className="spacer" />
       <Link className="icon-button" href="/help" aria-label="Help" data-guide="help-link-mobile">
         <LifeBuoy size={18} aria-hidden="true" />
@@ -119,6 +107,14 @@ export function MobileBar({ user, runtime }: { user: User; runtime: Runtime }) {
       <ThemeToggle />
       <PersonaSwitch current={user} />
     </header>
+  );
+}
+
+export function MobileMode({ runtime }: { runtime: Runtime }) {
+  return (
+    <div className="mobile-mode">
+      <ModeSwitch runtime={runtime} showHint={false} />
+    </div>
   );
 }
 

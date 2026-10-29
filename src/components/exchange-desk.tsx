@@ -13,7 +13,7 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { HelpNote } from "./help-note";
 import { presentError } from "./labels";
 import { useToast } from "./toast";
-import { validTxId, WalletStep } from "./wallet-step";
+import { PaymentPanel, type PaymentRequestView } from "./payment-panel";
 import { sha256Hex } from "@/crypto/pack";
 
 type Desk = {
@@ -29,6 +29,7 @@ type Desk = {
   walletUri?: string | null;
   payTo?: string | null;
   fileName?: string | null;
+  request?: PaymentRequestView | null;
 };
 
 export function ExchangeDesk(props: Desk) {
@@ -39,7 +40,7 @@ export function ExchangeDesk(props: Desk) {
   const [pastedKey, setPastedKey] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState<"release" | "pay" | "fail" | null>(null);
-  const [txId, setTxId] = useState("");
+  const [request, setRequest] = useState<PaymentRequestView | null>(props.request ?? null);
 
   async function run(work: () => Promise<void>, message?: string) {
     setPending(true);
@@ -83,10 +84,11 @@ export function ExchangeDesk(props: Desk) {
   }
 
   async function pay() {
-    await api(`/api/ash/exchanges/${props.id}/pay`, {
-      body: { expectedVersion: props.version, txId: props.practice ? undefined : txId },
+    const result = await api<{ request: PaymentRequestView | null }>(`/api/ash/exchanges/${props.id}/pay`, {
+      body: { expectedVersion: props.version },
       idempotencyKey: freshKey("pay"),
     });
+    if (result.request) setRequest(result.request);
   }
 
   async function download(mode: "release" | "recover") {
@@ -158,20 +160,21 @@ export function ExchangeDesk(props: Desk) {
       {props.role === "seller" && ["awaiting_payment", "payment_observed"].includes(props.state) ? (
         <p className="banner">Delivery is allowed. The buyer pays next. The file stays locked until ASH accepts the payment.</p>
       ) : null}
-      {props.role === "buyer" && props.state === "payment_observed" ? (
-        <p className="banner">
-          A Zcash node sees your transaction. ASH cannot see a shielded amount or recipient, so the file stays locked. The seller can confirm the payment in their wallet.
-        </p>
-      ) : null}
-      {props.role === "buyer" && props.state === "awaiting_payment" ? (
+      {props.role === "buyer" && ["awaiting_payment", "payment_observed"].includes(props.state) ? (
         <div className="stack" data-guide="exchange-pay">
-          {props.practice ? null : (
-            <WalletStep uri={props.walletUri} address={props.payTo} amountZec={zatoshiToZec(BigInt(props.priceZatoshi))} txId={txId} onTxId={setTxId} />
+          {!props.practice && request ? (
+            <PaymentPanel
+              request={request}
+              onConfirmed={() => {
+                toast("Payment confirmed on chain. The file is unlocked.");
+                router.refresh();
+              }}
+            />
+          ) : (
+            <button type="button" disabled={pending} onClick={() => (props.practice ? setConfirm("pay") : run(pay))}>
+              {props.practice ? "Review practice payment" : "Pay from my wallet"}
+            </button>
           )}
-          {!props.practice && !props.payTo ? <p className="alert">This offer has no receiving address, so it cannot be paid from a wallet.</p> : null}
-          <button type="button" disabled={pending || (!props.practice && !validTxId(txId))} onClick={() => setConfirm("pay")}>
-            {props.practice ? "Review practice payment" : "Record my payment"}
-          </button>
         </div>
       ) : null}
       {props.role === "buyer" && ["payment_verified", "delivered", "completed", "recovered"].includes(props.state) ? (
@@ -209,12 +212,12 @@ export function ExchangeDesk(props: Desk) {
         body={
           props.practice
             ? `This records a practice payment of ${zatoshiToZec(BigInt(props.priceZatoshi))} ZEC. It is not broadcast. The file stays locked until ASH accepts the payment.`
-            : `ASH will ask a Zcash node about transaction ${txId.slice(0, 10)}…. Seeing it does not prove the amount, so the file stays locked until the payment is accepted.`
+            : "ASH creates a payment request. You pay it from your own wallet, and the file unlocks once the payment is confirmed on chain."
         }
-        confirmLabel={props.practice ? "Record practice payment" : "Look up transaction"}
+        confirmLabel={props.practice ? "Record practice payment" : "Create payment request"}
         pending={pending}
         onClose={() => setConfirm(null)}
-        onConfirm={() => run(pay, props.practice ? "Payment recorded. You can open the file." : "Transaction looked up.")}
+        onConfirm={() => run(pay, props.practice ? "Payment recorded. You can open the file." : undefined)}
       />
       <ConfirmDialog
         open={confirm === "fail"}

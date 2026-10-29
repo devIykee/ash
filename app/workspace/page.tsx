@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { CircleAlert, CircleCheck, Hourglass, Layers } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
@@ -8,8 +9,7 @@ import { RecordList } from "@/components/record-list";
 import { TaskLauncher } from "@/components/task-launcher";
 import { overview } from "@/services/overview";
 import { currentActor } from "@/server/current";
-import { runtime } from "@/server/runtime";
-import { getStore } from "@/server/store";
+import { pageRuntime } from "@/server/runtime";
 
 export const metadata = { title: "Workspace" };
 
@@ -29,7 +29,7 @@ export default async function WorkspacePage() {
           lede="Pick a demo person from the account menu. There is no password. Avery pays people, Noor gets paid, Jules buys files, and Sam reviews records."
         />
         <p className="banner info">
-          {runtime().practice
+          {(await pageRuntime()).practice
             ? "Practice payments stay on this site. They are not sent on the network."
             : "You pay from your own wallet. ASH only looks up the transaction id you enter."}
         </p>
@@ -37,7 +37,7 @@ export default async function WorkspacePage() {
       </div>
     );
   }
-  const data = await getStore().read((tx) => overview(tx, actor));
+  const data = await pageRead((tx) => overview(tx, actor));
   const firstName = actor.user.name.split(" ")[0];
   return (
     <div className="stack" style={{ gap: "1.6rem" }}>

@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { ArrowRight, HandCoins } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -5,16 +6,14 @@ import { TipPay } from "@/components/tip-desk";
 import { AshError } from "@/domain/errors";
 import { zatoshiToZec } from "@/domain/money";
 import { getTip } from "@/services/tips";
-import { config } from "@/server/config";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Tip" };
 
 export default async function TipPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const tip = await getStore().read((tx) => getTip(tx, id));
-    const practice = config().allowSimulated;
+    const tip = await pageRead((tx) => getTip(tx, id));
+    const practice = tip.mode === "practice";
     return (
       <div className="stack public-page">
         <header className="public-head">

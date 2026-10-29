@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { GuideStart } from "@/components/guide-provider";
@@ -8,26 +9,36 @@ import { StatusPill } from "@/components/status-pill";
 import { zatoshiToZec } from "@/domain/money";
 import { listOperations } from "@/services/overview";
 import { listPlans, listSubscriptions } from "@/services/subscriptions";
-import { config } from "@/server/config";
-import { runtime } from "@/server/runtime";
+import { publicRequest, requestForOperation, type PublicRequest } from "@/services/payment-requests";
+import { payoutAddress } from "@/services/wallet-keys";
+
+import { pageRuntime } from "@/server/runtime";
 import { currentActor, requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Subscriptions" };
 
 export default async function SubscriptionsPage() {
   const actor = await requireActor();
   const viewer = await currentActor();
-  const data = await getStore().read(async (tx) => {
+  const env = await pageRuntime();
+  const practiceMode = env.practice;
+  const networkFor = env.network;
+  const data = await pageRead(async (tx) => {
     const plans = await listPlans(tx);
     const subs = await listSubscriptions(tx, actor);
     const operations = await listOperations(tx, actor);
+    const requests = new Map<string, PublicRequest>();
+    for (const sub of subs) {
+      const pending = await requestForOperation(tx, sub.id);
+      if (pending && pending.status !== "confirmed") requests.set(sub.id, publicRequest(pending));
+    }
+    const payout = practiceMode ? null : await payoutAddress(tx, actor.user.id, networkFor);
     const versions = new Map(operations.map((item) => [item.id, item.version]));
     const states = new Map(operations.map((item) => [item.id, item.state]));
-    return { plans, subs, versions, states };
+    return { plans, subs, versions, states, requests, payout };
   });
   const canPublish = viewer?.user.role === "creator" || viewer?.user.role === "operator";
-  const practice = config().allowSimulated;
+  const practice = env.practice;
   return (
     <div className="stack">
       <PageHeader
@@ -43,7 +54,7 @@ export default async function SubscriptionsPage() {
           { title: "If you cancel", body: "Future renewals stop. A payment that already succeeded is not reversed." },
         ]}
       />
-      {canPublish ? <PlanForm runtime={runtime()} /> : null}
+      {canPublish ? <PlanForm runtime={env} payout={data.payout} /> : null}
       <div className="grid-2" data-guide="plan-list">
         {data.plans.length === 0 ? <p className="muted">No plans are published yet. A creator can publish one above.</p> : null}
         {data.plans.map((plan) => (
@@ -68,7 +79,6 @@ export default async function SubscriptionsPage() {
           <EmptyState title="You have no subscription" body="Start one from a plan above. Customer lists stay private, so an empty list does not show other people." />
         ) : (
           data.subs.map((sub) => {
-            const plan = data.plans.find((item) => item.id === sub.offerId);
             const state = data.states.get(sub.id) ?? "draft";
             return (
             <article className="panel stack" key={sub.id}>
@@ -85,8 +95,7 @@ export default async function SubscriptionsPage() {
                   practice={practice}
                   state={state}
                   price={zatoshiToZec(BigInt(sub.priceZatoshi))}
-                  walletUri={plan?.walletUri}
-                  payTo={plan?.payTo}
+                  request={data.requests.get(sub.id) ?? null}
                 />
               ) : null}
               <Link className="link-arrow" href={`/operations/${sub.id}`}>Open the activity record <ArrowRight size={15} aria-hidden="true" /></Link>

@@ -1,65 +1,60 @@
 import { DEMO_PAY_TO } from "@/zcash/zip321";
-import { assertShieldedDestination } from "@/zcash/address";
-import type { Network, PaymentMode } from "@/domain/types";
+import type { Mode, Network, PaymentMode } from "@/domain/types";
+import { DEFAULT_LIGHTWALLETD } from "@/zcash/lightwalletd";
+import { currentMode, networkOf } from "./mode";
 
 const DEV_SESSION = "dev-only-session-secret-not-for-production";
 const DEV_RECEIPT = "dev-only-receipt-secret-not-for-production";
+const DEV_KEYS = "dev-only-viewing-key-secret-not-for-production";
 
 export type AppConfig = {
+  mode: Mode;
   network: Network;
   paymentMode: "simulated" | "chain";
   adapterMode: PaymentMode;
+  /** True only in practice mode. Practice payments never satisfy a testnet or mainnet record. */
   allowSimulated: boolean;
-  rpcUrl: string;
-  rpcUser: string;
-  rpcPassword: string;
+  lightwalletdUrl: string;
   requiredConfirmations: number;
+  /** Practice-mode pay-to fixture for the paid API. Real modes pay the operator's verified address. */
   payTo: string;
   payToIsFixture: boolean;
   sessionSecret: string;
   receiptSecret: string;
+  keySecret: string;
   usingDevSecrets: boolean;
   databaseUrl: string;
   dataPath: string;
 };
 
-export function config(): AppConfig {
-  const network: Network = process.env.ASH_ZCASH_NETWORK?.trim().toLowerCase() === "mainnet" ? "mainnet" : "testnet";
-  const paymentMode = process.env.ASH_PAYMENT_MODE?.trim().toLowerCase() === "chain" ? "chain" : "simulated";
+function confirmations(network: Network): number {
+  const specific = Number(process.env[`ASH_CONFIRMATIONS_${network.toUpperCase()}`] || "");
+  if (Number.isFinite(specific) && specific > 0) return Math.floor(specific);
+  const shared = Number(process.env.ASH_REQUIRED_CONFIRMATIONS || "");
+  if (Number.isFinite(shared) && shared > 0) return Math.floor(shared);
+  return network === "mainnet" ? 3 : 1;
+}
+
+export function config(mode: Mode = currentMode()): AppConfig {
+  const network = networkOf(mode);
+  const practice = mode === "practice";
   const sessionSecret = process.env.SESSION_SECRET || DEV_SESSION;
   const receiptSecret = process.env.RECEIPT_SIGNING_SECRET || DEV_RECEIPT;
-  const confirmations = Number(process.env.ASH_REQUIRED_CONFIRMATIONS || "3");
   return {
+    mode,
     network,
-    paymentMode,
-    adapterMode: paymentMode === "chain" ? "chain_observation" : "simulated",
-    allowSimulated: paymentMode !== "chain",
-    rpcUrl: process.env.ZCASH_RPC_URL || "",
-    rpcUser: process.env.ZCASH_RPC_USER || "",
-    rpcPassword: process.env.ZCASH_RPC_PASSWORD || "",
-    requiredConfirmations: Number.isFinite(confirmations) && confirmations > 0 ? Math.floor(confirmations) : 3,
-    // The structural fixture only exists on testnet. Mainnet must name a real recipient.
-    payTo: process.env.ASH_PAY_TO?.trim() || (network === "testnet" ? DEMO_PAY_TO : ""),
-    payToIsFixture: !process.env.ASH_PAY_TO?.trim() && network === "testnet",
+    paymentMode: practice ? "simulated" : "chain",
+    adapterMode: practice ? "simulated" : "chain_verified",
+    allowSimulated: practice,
+    lightwalletdUrl: process.env[`ASH_LIGHTWALLETD_${network.toUpperCase()}`]?.trim() || DEFAULT_LIGHTWALLETD[network],
+    requiredConfirmations: confirmations(network),
+    payTo: DEMO_PAY_TO,
+    payToIsFixture: practice,
     sessionSecret,
     receiptSecret,
+    keySecret: process.env.VIEWING_KEY_SECRET || process.env.SESSION_SECRET || DEV_KEYS,
     usingDevSecrets: !process.env.SESSION_SECRET || !process.env.RECEIPT_SIGNING_SECRET,
     databaseUrl: process.env.DATABASE_URL || "",
     dataPath: process.env.ASH_DATA_PATH || ".data/ash.json",
   };
-}
-
-export type PayToStatus = { ok: true; address: string; fixture: boolean } | { ok: false; reason: string };
-
-// Checks the server's own receiving address against the configured network.
-export function payToStatus(cfg: AppConfig = config()): PayToStatus {
-  if (!cfg.payTo) {
-    return { ok: false, reason: `ASH_PAY_TO is not set. A ${cfg.network} deployment needs a shielded address that receives API payments.` };
-  }
-  try {
-    assertShieldedDestination(cfg.payTo, cfg.network);
-    return { ok: true, address: cfg.payTo, fixture: cfg.payToIsFixture };
-  } catch (error) {
-    return { ok: false, reason: `ASH_PAY_TO is not a usable ${cfg.network} shielded address. ${error instanceof Error ? error.message : ""}`.trim() };
-  }
 }

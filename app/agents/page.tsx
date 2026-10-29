@@ -1,3 +1,5 @@
+import { pageRuntime } from "@/server/runtime";
+import { pageRead } from "@/server/page-data";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { AgentForm, PaidApiDemo, RevokeAgent } from "@/components/agent-desk";
@@ -5,16 +7,15 @@ import { GuideStart } from "@/components/guide-provider";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { zatoshiToZec } from "@/domain/money";
 import { listAgentTokens } from "@/services/agents";
-import { config } from "@/server/config";
+
 import { requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Agents" };
 
 export default async function AgentsPage() {
   const actor = await requireActor();
-  const tokens = actor.user.role === "operator" ? await getStore().read((tx) => listAgentTokens(tx, actor)) : [];
-  const practice = config().allowSimulated;
+  const tokens = actor.user.role === "operator" ? await pageRead((tx) => listAgentTokens(tx, actor)) : [];
+  const practice = (await pageRuntime()).practice;
   return (
     <div className="stack">
       <PageHeader

@@ -1,12 +1,12 @@
 import { HelpCenter } from "@/components/help-center";
 import { PageHeader } from "@/components/page-header";
 import { networkLabel } from "@/components/runtime";
-import { runtime } from "@/server/runtime";
+import { pageRuntime } from "@/server/runtime";
 
 export const metadata = { title: "Help" };
 
-export default function HelpPage() {
-  const env = runtime();
+export default async function HelpPage() {
+  const env = (await pageRuntime());
   return (
     <div className="stack">
       <PageHeader

@@ -3,6 +3,7 @@ import { newId, nowIso } from "@/domain/ids";
 import { assertTransition } from "@/domain/machine";
 import { POLICY_VERSION, type AshEvent, type OperationRecord, type OperationState } from "@/domain/types";
 import { assertNoSecrets, hashEvent } from "@/evidence/format";
+import { currentMode } from "@/server/mode";
 import type { Tx } from "@/store/types";
 
 export async function createOperation(
@@ -12,6 +13,7 @@ export async function createOperation(
   },
 ): Promise<{ id: string; version: number; data: OperationRecord }> {
   const record: OperationRecord = {
+    mode: currentMode(),
     ...input,
     policyVersion: POLICY_VERSION,
     createdAt: nowIso(),

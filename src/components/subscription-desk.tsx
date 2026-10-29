@@ -7,9 +7,10 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { presentError } from "./labels";
 import { useToast } from "./toast";
 import { addressPlaceholder, sampleAddress, type Runtime } from "./runtime";
-import { validTxId, WalletStep } from "./wallet-step";
+import { PaymentPanel, type PaymentRequestView } from "./payment-panel";
+import { PayoutNotice } from "./payout-notice";
 
-export function PlanForm({ runtime }: { runtime: Runtime }) {
+export function PlanForm({ runtime, payout = null }: { runtime: Runtime; payout?: string | null }) {
   const router = useRouter();
   const toast = useToast();
   const fixture = sampleAddress(runtime);
@@ -25,7 +26,7 @@ export function PlanForm({ runtime }: { runtime: Runtime }) {
     setError("");
     setPending(true);
     try {
-      await api("/api/ash/plans", { body: { title, description, priceZec: price, payTo: payTo.trim() || undefined, intervalDays: 30, graceDays: 3 } });
+      await api("/api/ash/plans", { body: { title, description, priceZec: price, payTo: runtime.practice ? payTo.trim() || undefined : undefined, intervalDays: 30, graceDays: 3 } });
       toast(`${title} is published.`);
       router.refresh();
     } catch (caught) {
@@ -49,13 +50,14 @@ export function PlanForm({ runtime }: { runtime: Runtime }) {
         Price in ZEC
         <input value={price} onChange={(event) => setPrice(event.target.value)} required inputMode="decimal" />
       </label>
-      <label>
-        Shielded address that receives renewals{runtime.practice ? " (optional)" : ""}
-        <input value={payTo} onChange={(event) => setPayTo(event.target.value.trim())} spellCheck={false} autoComplete="off" placeholder={addressPlaceholder(runtime)} required={!runtime.practice} />
+      {runtime.practice ? null : <PayoutNotice runtime={runtime} payout={payout} />}
+      <label hidden={!runtime.practice}>
+        Shielded address that receives renewals (optional)
+        <input value={payTo} onChange={(event) => setPayTo(event.target.value.trim())} spellCheck={false} autoComplete="off" placeholder={addressPlaceholder(runtime)} />
         {fixture && payTo === fixture ? <span className="field-hint">The sample address is an unfunded test fixture.</span> : null}
       </label>
       <p className="field-hint">The period is 30 days, with 3 days of grace. Publishing a plan does not charge anyone.</p>
-      <button type="submit" disabled={pending}>
+      <button type="submit" disabled={pending || (!runtime.practice && !payout)}>
         {pending ? "Publishing" : "Publish plan"}
       </button>
       {error ? <p className="alert">{error}</p> : null}
@@ -107,37 +109,39 @@ export function SubscriptionActions({
   practice,
   state,
   price,
-  walletUri,
-  payTo,
+  request: initialRequest = null,
 }: {
   id: string;
   version: number;
   practice: boolean;
   state: string;
   price: string;
-  walletUri?: string | null;
-  payTo?: string | null;
+  request?: PaymentRequestView | null;
 }) {
   const router = useRouter();
   const toast = useToast();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState<"renew" | "cancel" | null>(null);
-  const [txId, setTxId] = useState("");
-  const [paying, setPaying] = useState(false);
-  const first = state === "awaiting_payment";
+  const [request, setRequest] = useState<PaymentRequestView | null>(initialRequest);
+  const first = state === "awaiting_payment" || state === "payment_observed";
   const cancelled = state === "cancelled";
 
-  async function post(path: string, withVersion: boolean, extra: Record<string, unknown> = {}) {
+  async function post(path: string, withVersion: boolean) {
     setError("");
     setPending(true);
     try {
-      await api(path, withVersion ? { body: { expectedVersion: version, ...extra }, idempotencyKey: freshKey("subact") } : { method: "POST", body: {} });
-      setTxId("");
-      setPaying(false);
-      toast(path.endsWith("/cancel") ? "Future renewals cancelled." : path.endsWith("/refresh") ? "Period checked." : practice ? "Payment recorded." : "Transaction looked up.");
+      const result = await api<{ request?: PaymentRequestView | null }>(
+        path,
+        withVersion ? { body: { expectedVersion: version }, idempotencyKey: freshKey("subact") } : { method: "POST", body: {} },
+      );
       setConfirm(null);
-      router.refresh();
+      if (result.request) {
+        setRequest(result.request);
+      } else {
+        toast(path.endsWith("/cancel") ? "Future renewals cancelled." : path.endsWith("/refresh") ? "Period checked." : "Payment recorded.");
+        router.refresh();
+      }
     } catch (caught) {
       setError(presentError(caught, "We couldn't update the subscription. Reload it before trying again."));
     } finally {
@@ -148,18 +152,20 @@ export function SubscriptionActions({
   return (
     <div className="stack">
       {cancelled ? <p className="muted">Cancelled. The record is kept, and it will not renew.</p> : null}
-      {!cancelled && !practice && paying ? (
-        <WalletStep uri={walletUri} address={payTo} amountZec={price} txId={txId} onTxId={setTxId} />
+      {!cancelled && !practice && request ? (
+        <PaymentPanel
+          request={request}
+          onConfirmed={() => {
+            setRequest(null);
+            toast("Payment confirmed on chain. Your period is active.");
+            router.refresh();
+          }}
+        />
       ) : null}
-      {!cancelled && !practice && !payTo ? <p className="alert">This plan has no receiving address, so it cannot be paid from a wallet.</p> : null}
       {cancelled ? null : (
         <div className="row">
-          {practice || paying ? (
-            <button type="button" onClick={() => setConfirm("renew")} disabled={pending || (!practice && !validTxId(txId))}>
-              {practice ? (first ? "Pay first period" : "Renew now") : "Record my payment"}
-            </button>
-          ) : (
-            <button type="button" onClick={() => setPaying(true)} disabled={pending || !payTo}>
+          {request && !practice ? null : (
+            <button type="button" onClick={() => (practice ? setConfirm("renew") : post(`/api/ash/subscriptions/${id}/renew`, true))} disabled={pending}>
               {first ? "Pay first period" : "Renew now"}
             </button>
           )}
@@ -177,15 +183,11 @@ export function SubscriptionActions({
       <ConfirmDialog
         open={confirm === "renew"}
         title={first ? "Pay for the first period?" : "Renew for another period?"}
-        body={
-          practice
-            ? `This records a practice payment of ${price} ZEC. It does not approve any period after this one. Each renewal asks for its own confirmation.`
-            : `ASH will ask a Zcash node about transaction ${txId.slice(0, 10)}…. Seeing it does not prove the amount, so access starts only after the payment is accepted.`
-        }
-        confirmLabel={practice ? (first ? "Pay first period" : "Renew now") : "Look up transaction"}
+        body={`This records a practice payment of ${price} ZEC. It does not approve any period after this one. Each renewal asks for its own confirmation.`}
+        confirmLabel={first ? "Pay first period" : "Renew now"}
         pending={pending}
         onClose={() => setConfirm(null)}
-        onConfirm={() => post(`/api/ash/subscriptions/${id}/renew`, true, practice ? {} : { txId })}
+        onConfirm={() => post(`/api/ash/subscriptions/${id}/renew`, true)}
       />
       <ConfirmDialog
         open={confirm === "cancel"}

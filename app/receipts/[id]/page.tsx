@@ -1,17 +1,17 @@
+import { pageRead } from "@/server/page-data";
 import { notFound } from "next/navigation";
 import { receiptFieldLabel, verificationLabel } from "@/components/labels";
 import { PageHeader } from "@/components/page-header";
 import { AshError } from "@/domain/errors";
 import { zatoshiToZec } from "@/domain/money";
 import { checkReceipt, getReceipt } from "@/services/tips";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Receipt" };
 
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const receipt = await getStore().read((tx) => getReceipt(tx, id));
+    const receipt = await pageRead((tx) => getReceipt(tx, id));
     const verdict = checkReceipt(receipt);
     const { publicKey, signature, ...body } = receipt;
     return (

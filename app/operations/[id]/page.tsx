@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { ArrowRight, Circle, CircleCheck, CircleX, KeyRound, Wallet } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,7 +10,6 @@ import { StatusPill } from "@/components/status-pill";
 import { zatoshiToZec } from "@/domain/money";
 import { operationDetail } from "@/services/overview";
 import { requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Activity record" };
 
@@ -25,7 +25,7 @@ function EventDot({ state }: { state: string | null }) {
 export default async function OperationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const actor = await requireActor();
-  const detail = await getStore().read((tx) => operationDetail(tx, actor, id));
+  const detail = await pageRead((tx) => operationDetail(tx, actor, id));
   if (!detail || detail === "forbidden") notFound();
   const operation = detail.operation;
   const workflowId = operation.parentId && operation.type === "tip" ? operation.parentId : id;

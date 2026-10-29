@@ -14,8 +14,8 @@ One operation moves through create, conditions, authorization, payment, verifica
 
 | Module | Status | What you can do now |
 | --- | --- | --- |
-| Shielded payroll | Implemented with a simulated adapter | Validate a batch, authorize, execute, retry a failed line, and export an aggregate report |
-| Tip jar and receipts | Implemented | ZIP-321 request, simulated or observed payment, signed amount receipt |
+| Shielded payroll | Implemented | Validate a batch, authorize, pay from your wallet, confirm lines on chain with your full viewing key, export an aggregate report |
+| Tip jar and receipts | Implemented | ZIP-321 request with a memo reference, verified on chain in testnet and mainnet, signed receipt |
 | x402-style API payments | Implemented as an ASH extension | HTTP 402 challenge, one-time fulfillment, TypeScript SDK, demo agent |
 | Encrypted exchange | Implemented as a labeled prototype | Client-side AES-GCM, Shamir 2-of-3 delivery, local decrypt |
 | Audit grants | Partially implemented | Honest scope records and filtered reports. Viewing keys are not stored or revoked |
@@ -23,7 +23,7 @@ One operation moves through create, conditions, authorization, payment, verifica
 | Memo linter | Implemented | Local pattern analysis and a reviewed cleanup |
 | Dispute evidence | Implemented | Signed package, optional encryption to an arbiter key, local verification |
 
-Payment states are separate: instructions created, submitted, observed, verified, confirmed, rejected, unresolved. Only a simulated payment marked `verified`, or a chain payment marked `confirmed` with enough confirmations, can satisfy a release. This build's chain adapter never marks a payment confirmed. It only reports that a node saw a transaction id.
+Payment states are separate: instructions created, submitted, observed, verified, confirmed, rejected, unresolved. Only a practice payment marked `verified` (practice mode only), or a chain payment marked `confirmed` with enough confirmations, can satisfy a release. A chain payment is confirmed only after ASH decrypts it with the payee's viewing key and the amount, recipient, memo reference, and note commitment all match.
 
 ## Architecture
 
@@ -38,7 +38,7 @@ flowchart LR
   API --> Ops[Operations and events]
   API --> Pay[Payment adapter]
   Pay --> Sim[Simulated ledger]
-  Pay --> Rpc[Zcash RPC observation]
+  Pay --> Lwd[lightwalletd: verify with viewing key]
   UI --> Crypto[Browser encryption]
 ```
 
@@ -77,16 +77,19 @@ pnpm smoke
 
 `pnpm agent:demo` and `pnpm smoke` need ASH already running, from `pnpm dev` or `pnpm start`. Set `ASH_BASE_URL` to point them at another deployment. `pnpm smoke` walks every module over HTTP, reads the server's network and payment mode from `/api/ash/health`, and expects the matching behavior. `pnpm agent:demo` writes `demo-output/`, which is gitignored.
 
-## Testnet, mainnet, and payment modes
+## Practice, testnet, and mainnet
 
-The network and the payment mode are independent. Every combination works:
+Switch modes in the sidebar (or at the top of the screen on phones). Each mode is its own workspace.
 
-| | Practice payments (`simulated`) | Wallet payments (`chain`) |
-| --- | --- | --- |
-| Testnet | Default. Sample fixture addresses are prefilled | Pay with a testnet wallet, paste the transaction id |
-| Mainnet | Mainnet address checks, no prefilled samples | Pay with a mainnet wallet, paste the transaction id |
+| Mode | What happens |
+| --- | --- |
+| Practice | Labeled practice payments. Nothing is sent. Sample fixture addresses are prefilled. |
+| Testnet | Real Zcash testnet payments from your wallet, verified on chain. Test coins have no value. |
+| Mainnet | Real Zcash mainnet payments from your wallet, verified on chain. Real money. |
 
-On mainnet, `ASH_PAY_TO` must be set to your own mainnet shielded address. The testnet fixture is never used there. In wallet mode, ASH shows a ZIP-321 link and the receiving address, then asks a node whether the transaction id exists. That observation is recorded but never releases a file, a receipt, a subscription period, or the paid note. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mainnet-checklist).
+To be paid in testnet or mainnet, add your receiving address and a viewing key under **Receiving keys**. A payment request then shows a ZIP-321 link, a QR code, and a unique memo. The payer's wallet signs and broadcasts the transaction. ASH finds it through lightwalletd, decrypts it with your viewing key, checks the amount, recipient, memo reference, and note commitment, and unlocks the tip receipt, file, subscription period, or paid API once it has enough confirmations. Payroll is confirmed from the operator's outgoing notes. ASH never holds a spending key. Details: [docs/ZCASH_INTEGRATION.md](docs/ZCASH_INTEGRATION.md).
+
+Demo personas are shared and have no password. On a public deployment, anyone can change a persona's receiving key, so do not take real mainnet payments there without real accounts.
 
 ## Environment
 
@@ -94,17 +97,16 @@ See `.env.example`.
 
 | Variable | Purpose |
 | --- | --- |
-| `ASH_ZCASH_NETWORK` | `testnet` (default) or `mainnet`. Case-insensitive |
-| `ASH_PAYMENT_MODE` | `simulated` (default, practice payments) or `chain` (wallet payments, transaction id lookup) |
-| `ZCASH_RPC_URL` | Optional `getrawtransaction` endpoint |
-| `ZCASH_RPC_USER`, `ZCASH_RPC_PASSWORD` | Optional RPC basic auth |
-| `ASH_REQUIRED_CONFIRMATIONS` | Default 3. Observation alone still does not release data |
-| `ASH_PAY_TO` | Shielded address on API challenges. On testnet the default is an unfunded structural fixture. Required on mainnet |
+| `ASH_MODES` | Modes offered, default `practice,testnet,mainnet` |
+| `ASH_DEFAULT_MODE` | Mode for new visitors, default `practice` |
+| `VIEWING_KEY_SECRET` | Seals stored viewing keys. Required in production |
+| `ASH_LIGHTWALLETD_TESTNET`, `ASH_LIGHTWALLETD_MAINNET` | lightwalletd endpoints. Defaults: testnet.zec.rocks and zec.rocks |
+| `ASH_CONFIRMATIONS_TESTNET`, `ASH_CONFIRMATIONS_MAINNET` | Confirmations before a payment counts. Defaults 1 and 3 |
 | `SESSION_SECRET`, `RECEIPT_SIGNING_SECRET` | Required before a shared deployment |
 | `DATABASE_URL` | Postgres. Required on Vercel |
 | `ASH_DATA_PATH` | Local JSON store, default `.data/ash.json` |
 
-Do not put a seed phrase, spending key, or viewing key in the environment.
+Do not put a seed phrase or spending key anywhere. Viewing keys are added in the app and stored sealed, never in the environment.
 
 ## Database
 
@@ -122,15 +124,17 @@ Production is https://ash-nu-khaki.vercel.app. The app uses Neon Postgres and th
 
 **Implemented:** shared lifecycle, authorization, idempotency, event hash chain, simulated payments, client-side encryption, the eight workflows above, the reference 402 endpoint, the SDK, and the demo agent.
 
-**Simulated:** the default payment adapter. Receipts from it say so.
+**Practice mode:** the simulated payment adapter. Receipts from it say so.
 
-**Partially implemented:** chain observation via `getrawtransaction`. It cannot see a shielded amount, recipient, or memo. Viewing-key grants are disclosures, not key custody. Conditional delivery is Shamir sharing with an explicit mediator share on the server.
+**Implemented for testnet and mainnet:** Sapling payment verification with viewing keys over lightwalletd, checked against the official zcash-test-vectors. **Partially implemented:** Orchard and Ironwood notes are not verified, so payment requests use Sapling receivers. Viewing-key grants are disclosures, not key custody. Conditional delivery is Shamir sharing with an explicit mediator share on the server.
 
-**Planned:** broadcasting transactions, wallet-produced diversified addresses, FROST signing, automatic recurring shielded transfers, and a Halo 2 circuit. ASH does not claim those.
+**Planned:** Orchard and Ironwood verification, wallet-produced diversified addresses, FROST signing, automatic recurring shielded transfers, and a Halo 2 circuit. ASH does not claim those.
 
 ## Limitations
 
-- ASH does not construct or broadcast Zcash transactions and does not hold spend authority.
+- ASH does not construct or broadcast Zcash transactions and does not hold spend authority. The payer's wallet broadcasts.
+- ASH trusts its lightwalletd server to report blocks honestly. Amounts, recipients, and memos are verified cryptographically.
+- A receiving key reveals every payment into that wallet account. Use a dedicated account.
 - A ZIP-321 link is a request to a wallet. Opening it does not pay.
 - Diversified addresses are not derived here. A viewing key links every diversifier of the same account. Address diversification is not a correlation defense by itself.
 - An application expiry does not revoke a viewing key someone already copied.

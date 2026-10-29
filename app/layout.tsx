@@ -4,7 +4,7 @@ import "@fontsource/outfit/latin-500.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import { Shell } from "@/components/shell";
 import { currentActor } from "@/server/current";
-import { runtime } from "@/server/runtime";
+import { pageRuntime } from "@/server/runtime";
 import { THEME_SCRIPT } from "@/components/theme-script";
 import "./globals.css";
 
@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>
-        <Shell user={user} runtime={runtime()}>
+        <Shell user={user} runtime={(await pageRuntime())}>
           {children}
         </Shell>
       </body>

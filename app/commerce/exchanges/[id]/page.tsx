@@ -1,3 +1,5 @@
+import { recordMode } from "@/server/mode";
+import { pageRead } from "@/server/page-data";
 import { ArrowRight } from "lucide-react";
 import { recordLabel } from "@/components/labels";
 import Link from "next/link";
@@ -11,10 +13,10 @@ import { AshError } from "@/domain/errors";
 import { DISCLOSURES } from "@/domain/types";
 import { paymentModeLabel, stateLabel } from "@/components/labels";
 import { getExchange, getOffer } from "@/services/exchange";
+import { publicRequest, requestForOperation } from "@/services/payment-requests";
 import { operationDetail } from "@/services/overview";
-import { config } from "@/server/config";
+
 import { requireActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Exchange" };
 
@@ -36,11 +38,12 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const actor = await requireActor();
   try {
-    const [detail, exchange, offer] = await getStore().read(async (tx) => {
+    const [detail, exchange, offer, pendingRequest] = await pageRead(async (tx) => {
       const loaded = await getExchange(tx, actor, id);
       const operation = await operationDetail(tx, actor, id);
       const listing = await getOffer(tx, loaded.exchange.offerId, null);
-      return [operation, loaded, listing] as const;
+      const pending = actor.user.id === loaded.exchange.buyerId ? await requestForOperation(tx, id) : null;
+      return [operation, loaded, listing, pending && pending.status !== "confirmed" ? publicRequest(pending) : null] as const;
     });
     if (!detail || detail === "forbidden") notFound();
     const role = actor.user.id === exchange.exchange.sellerId ? "seller" : actor.user.id === exchange.exchange.buyerId ? "buyer" : "other";
@@ -72,10 +75,11 @@ export default async function ExchangePage({ params }: { params: Promise<{ id: s
           priceZatoshi={exchange.exchange.priceZatoshi}
           buyerPublicKey={exchange.exchange.buyerPublicKey}
           releaseReady={exchange.exchange.releaseReady}
-          practice={config().allowSimulated}
+          practice={recordMode(detail.operation) === "practice"}
           walletUri={offer.walletUri}
           payTo={offer.payTo}
           fileName={offer.fileName}
+          request={pendingRequest}
         />
         <Link className="link-arrow" href={`/operations/${id}`}>Open the activity record <ArrowRight size={15} aria-hidden="true" /></Link>
       </div>

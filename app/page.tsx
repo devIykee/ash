@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/components/landing-page";
 import { currentActor } from "@/server/current";
-import { runtime } from "@/server/runtime";
+import { pageRuntime } from "@/server/runtime";
 
 export const metadata: Metadata = {
   title: "Pay someone privately",
@@ -10,5 +10,5 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const actor = await currentActor();
-  return <LandingPage signedIn={Boolean(actor)} runtime={runtime()} />;
+  return <LandingPage signedIn={Boolean(actor)} runtime={(await pageRuntime())} />;
 }

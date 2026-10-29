@@ -152,7 +152,12 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   function primary() {
     if (!step) return;
     if (step.href && pathname !== step.href) {
-      router.push(step.href);
+      const href = step.href;
+      router.push(href);
+      // If client navigation stalls (for example a tab left open across a deploy), load the page directly.
+      window.setTimeout(() => {
+        if (window.location.pathname !== href) window.location.assign(href);
+      }, 2500);
       return;
     }
     go(stepIndex + 1);

@@ -2,12 +2,16 @@ import { GuideStart } from "@/components/guide-provider";
 import { OfferForm } from "@/components/offer-form";
 import { ConsequenceList, PageHeader } from "@/components/page-header";
 import { requireActor } from "@/server/current";
-import { runtime } from "@/server/runtime";
+import { pageRead } from "@/server/page-data";
+import { pageRuntime } from "@/server/runtime";
+import { payoutAddress } from "@/services/wallet-keys";
 
 export const metadata = { title: "Publish a file" };
 
 export default async function NewOfferPage() {
   const actor = await requireActor();
+  const env = await pageRuntime();
+  const payout = env.practice ? null : await pageRead((tx) => payoutAddress(tx, actor.user.id, env.network));
   const allowed = actor.user.role === "creator" || actor.user.role === "operator";
   return (
     <div className="stack">
@@ -24,7 +28,7 @@ export default async function NewOfferPage() {
           { title: "What payment does", body: "Publishing does not collect money. The buyer pays after you allow delivery." },
         ]}
       />
-      {allowed ? <OfferForm runtime={runtime()} /> : <p className="banner">Sign in as Noor Hale or Avery Chen to publish. Buyers start from an existing offer.</p>}
+      {allowed ? <OfferForm runtime={env} payout={payout} /> : <p className="banner">Sign in as Noor Hale or Avery Chen to publish. Buyers start from an existing offer.</p>}
     </div>
   );
 }

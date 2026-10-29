@@ -17,7 +17,7 @@ An operator creates lines with a label, a shielded address, and a ZEC amount. AS
 
 ## B. Private tips and receipts
 
-**Status:** implemented. Payment is simulated unless a transaction id is submitted for observation.
+**Status:** implemented. Practice mode records practice payments. Testnet and mainnet verify real payments on chain.
 
 A creator publishes a page. ASH returns a ZIP-321 URI for a suggested amount. A supporter pays through the simulated adapter, or submits a transaction id. A verified simulated payment produces `ash-receipt-v1` with only the approved fields. Observation does not produce a receipt. The signature can be checked by anyone who has the receipt. The verification level says what was actually checked.
 
@@ -29,7 +29,7 @@ A creator publishes a page. ASH returns a ZIP-321 URI for a suggested amount. A 
 
 `GET /api/v1/paid/research` returns HTTP 402 and a `PAYMENT-REQUIRED` header. The body uses `x402Version: 2`, scheme `zcash-shielded`, network `zcash:testnet` or `zcash:mainnet`, and an amount in zatoshi. `extra.officialX402Scheme` is false. The challenge expires in five minutes and is bound to `/api/v1/paid/research`. `POST /api/ash/challenges/:id/pay` settles it. The retry sends `PAYMENT-SIGNATURE`. A second use returns 409. The 402 response is not a payment.
 
-**Limitation:** there is no registered CAIP-2 identifier for Zcash in the x402 scheme list this build follows. Confirmation latency is why observation does not unlock the route.
+**Limitation:** there is no registered CAIP-2 identifier for Zcash in the x402 scheme list this build follows. In testnet and mainnet the challenge carries a payment request (address, memo, ZIP-321 URI) and the route runs once the payment is confirmed.
 
 ## D. Encrypted exchange
 

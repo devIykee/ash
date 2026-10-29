@@ -2,7 +2,7 @@ import { AshError } from "@/domain/errors";
 import { newId } from "@/domain/ids";
 import { zecToZatoshi } from "@/domain/money";
 import { paymentSatisfies } from "@/domain/payment";
-import { DISCLOSURES, type OperationRecord } from "@/domain/types";
+import { DISCLOSURES, type Mode, type OperationRecord } from "@/domain/types";
 import { assertSealedBox, type SealedBox } from "@/crypto/box";
 import { assertPack, ciphertextSha256, type AshPack } from "@/crypto/pack";
 import { shareFromJson } from "@/crypto/shamir";
@@ -18,11 +18,13 @@ import {
   idempotent,
   mustGet,
   requestHash,
-  settleObserved,
   settleSimulated,
   type Actor,
 } from "./common";
 import { createOperation, saveOperation } from "./events";
+import { createPaymentRequest, onPayment, publicRequest, requestForOperation } from "./payment-requests";
+import { payoutAddress } from "./wallet-keys";
+import { currentMode, recordMode, withMode } from "@/server/mode";
 
 export type OfferData = {
   sellerId: string;
@@ -39,6 +41,7 @@ export type OfferData = {
   pack: AshPack;
   status: "open" | "closed";
   createdAt: string;
+  mode?: Mode;
 };
 
 export type ExchangeData = {
@@ -121,10 +124,12 @@ export async function createOffer(
     const price = zecToZatoshi(input.priceZec);
     if (price <= 0n) throw new AshError("invalid_amount", "Price must be greater than zero.");
     const cfg = config();
-    const payToInput = input.payTo?.trim() || "";
-    if (!payToInput && !cfg.allowSimulated) {
-      throw new AshError("validation_failed", "Add the shielded address that receives the buyer's payment.");
+    // Real modes pay the seller's verified receiving address. Practice accepts any address or none.
+    const verified = cfg.allowSimulated ? null : await payoutAddress(tx, actor.user.id, cfg.network);
+    if (!cfg.allowSimulated && !verified) {
+      throw new AshError("payee_key_missing", `Add your ${cfg.network} receiving address and viewing key in Settings first, so ASH can verify payments to you.`, 409);
     }
+    const payToInput = verified ?? (input.payTo?.trim() || "");
     const payTo = payToInput ? assertShieldedDestination(payToInput, cfg.network).address : null;
     const id = newId("offer");
     const offer: OfferData = {
@@ -140,6 +145,7 @@ export async function createOffer(
       ciphertextSha256: ciphertextSha256(input.pack),
       byteLength: input.pack.chunks.reduce((sum, chunk) => sum + chunk.ciphertext.length / 2, 0),
       pack: input.pack,
+      mode: cfg.mode,
       status: "open",
       createdAt: new Date().toISOString(),
     };
@@ -150,7 +156,8 @@ export async function createOffer(
 
 export async function listOffers(tx: Tx): Promise<PublicOffer[]> {
   const offers = await tx.list<OfferData>("offer");
-  return offers.filter((offer) => offer.data.status === "open").map((offer) => publish(offer.id, offer.data));
+  const mode = currentMode();
+  return offers.filter((offer) => offer.data.status === "open" && recordMode(offer.data) === mode).map((offer) => publish(offer.id, offer.data));
 }
 
 export async function getOffer(tx: Tx, id: string, actor: Actor | null) {
@@ -267,58 +274,83 @@ export async function releaseExchange(
   return { version: saved.version, operation: saved.data, exchange: viewExchange(next, actor) };
 }
 
-export async function payExchange(tx: Tx, actor: Actor, id: string, input: { expectedVersion: number; txId?: string }, idempotencyKey: string | null) {
+export async function payExchange(tx: Tx, actor: Actor, id: string, input: { expectedVersion: number }, idempotencyKey: string | null) {
   assertScope(actor, "pay");
-  return idempotent(tx, `exchange-pay:${id}`, idempotencyKey, requestHash(input), async () => {
-    const operation = await mustGet<OperationRecord>(tx, "operation", id);
-    if (operation.version !== input.expectedVersion) throw new AshError("conflict", "This exchange changed. Reload it.", 409);
-    const exchange = await mustGet<ExchangeData>(tx, "exchange", id);
-    if (actor.user.id !== exchange.data.buyerId) throw new AshError("forbidden", "Only the buyer can pay for this exchange.", 403);
-    if (operation.data.state !== "awaiting_payment" && operation.data.state !== "payment_observed") {
-      throw new AshError("invalid_state", "The seller must authorize delivery before payment.", 409);
-    }
-    const cfg = config();
-    if (!cfg.allowSimulated && !input.txId) {
-      throw new AshError("txid_required", "Pay the seller from a wallet, then enter the transaction id.", 400);
-    }
-    const payment = input.txId
-      ? await settleObserved(tx, {
-          idempotencyKey: `exchange:${id}`,
-          txId: input.txId,
-          amountZatoshi: exchange.data.priceZatoshi,
-          feeZatoshi: "0",
-        })
-      : await settleSimulated(tx, actor, {
-          idempotencyKey: `exchange:${id}`,
-          amountZatoshi: exchange.data.priceZatoshi,
-          feeZatoshi: "0",
-        });
-    const satisfied = paymentSatisfies(payment, cfg.allowSimulated);
-    if (input.txId && payment.status !== "observed" && !satisfied) {
-      throw new AshError("payment_unverified", payment.reason || "The transaction was not observed.", 402);
-    }
-    const state = satisfied ? "payment_verified" : "payment_observed";
-    const saved = await saveOperation(
-      tx,
-      operation,
-      {
-        ...operation.data,
-        state,
-        payment,
-        access: {
-          kind: "delivery",
-          entitled: satisfied,
-          restricted: !satisfied,
-          note: satisfied ? "Payment accepted. The release envelope can be downloaded." : payment.reason || DISCLOSURES.observed,
+  const record = await mustGet<OperationRecord>(tx, "operation", id);
+  return withMode(recordMode(record.data), () =>
+    idempotent(tx, `exchange-pay:${id}`, idempotencyKey, requestHash(input), async () => {
+      const operation = await mustGet<OperationRecord>(tx, "operation", id);
+      if (operation.version !== input.expectedVersion) throw new AshError("conflict", "This exchange changed. Reload it.", 409);
+      const exchange = await mustGet<ExchangeData>(tx, "exchange", id);
+      if (actor.user.id !== exchange.data.buyerId) throw new AshError("forbidden", "Only the buyer can pay for this exchange.", 403);
+      if (operation.data.state !== "awaiting_payment" && operation.data.state !== "payment_observed") {
+        throw new AshError("invalid_state", "The seller must allow delivery before payment.", 409);
+      }
+      const cfg = config();
+      if (!cfg.allowSimulated) {
+        // Real payment: return the request the buyer's wallet pays. The file unlocks on confirmation.
+        const existing = await requestForOperation(tx, id);
+        const request =
+          existing && existing.status !== "confirmed"
+            ? existing
+            : await createPaymentRequest(tx, { operationId: id, purpose: "exchange", payeeId: exchange.data.sellerId, amountZatoshi: BigInt(exchange.data.priceZatoshi), label: operation.data.label });
+        return { version: operation.version, operation: operation.data, payment: operation.data.payment, request: publicRequest(request) };
+      }
+      const payment = await settleSimulated(tx, actor, {
+        idempotencyKey: `exchange:${id}`,
+        amountZatoshi: exchange.data.priceZatoshi,
+        feeZatoshi: "0",
+      });
+      const satisfied = paymentSatisfies(payment, cfg.allowSimulated);
+      const saved = await saveOperation(
+        tx,
+        operation,
+        {
+          ...operation.data,
+          state: satisfied ? "payment_verified" : "payment_observed",
+          payment,
+          access: {
+            kind: "delivery",
+            entitled: satisfied,
+            restricted: !satisfied,
+            note: satisfied ? "Payment accepted. The release envelope can be downloaded." : payment.reason || DISCLOSURES.observed,
+          },
         },
-      },
-      "payment_recorded",
-      payment.mode,
-      payment.txId,
-    );
-    return { version: saved.version, operation: saved.data, payment };
-  });
+        "payment_recorded",
+        payment.mode,
+        payment.txId,
+      );
+      return { version: saved.version, operation: saved.data, payment, request: null };
+    }),
+  );
 }
+
+// A real exchange payment: seen is shown to both sides; confirmed unlocks the release envelope.
+onPayment("exchange", async (tx, request, payment) => {
+  const operation = await mustGet<OperationRecord>(tx, "operation", request.operationId);
+  if (!["awaiting_payment", "payment_observed"].includes(operation.data.state)) return;
+  const confirmed = payment.status === "confirmed";
+  const state = confirmed ? "payment_verified" : "payment_observed";
+  if (!confirmed && operation.data.state === "payment_observed" && operation.data.payment?.confirmations === payment.confirmations) return;
+  await saveOperation(
+    tx,
+    operation,
+    {
+      ...operation.data,
+      state,
+      payment,
+      access: {
+        kind: "delivery",
+        entitled: confirmed,
+        restricted: !confirmed,
+        note: confirmed ? "Payment confirmed on chain. The release envelope can be downloaded." : payment.reason || "Payment seen. Waiting for confirmations.",
+      },
+    },
+    "payment_recorded",
+    payment.mode,
+    payment.txId,
+  );
+});
 
 export async function exchangePackage(tx: Tx, actor: Actor, id: string) {
   const operation = await mustGet<OperationRecord>(tx, "operation", id);

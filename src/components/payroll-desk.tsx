@@ -11,27 +11,6 @@ import { paymentModeLabel, presentError, stateLabel } from "./labels";
 import { StatusPill } from "./status-pill";
 import { validTxId } from "./wallet-step";
 
-function RecordLine({ disabled, onRecord }: { disabled: boolean; onRecord: (txId: string) => void }) {
-  const [txId, setTxId] = useState("");
-  return (
-    <form
-      className="stack"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onRecord(txId);
-      }}
-    >
-      <label>
-        <span className="sr-only">Transaction id</span>
-        <input value={txId} onChange={(event) => setTxId(event.target.value.trim())} placeholder="Transaction id" spellCheck={false} autoComplete="off" />
-      </label>
-      <button className="small" type="submit" disabled={disabled || !validTxId(txId)}>
-        Record
-      </button>
-    </form>
-  );
-}
-
 type Line = {
   id: string;
   label: string;
@@ -42,6 +21,28 @@ type Line = {
   attempt: number;
   error: string | null;
 };
+
+function VerifyRun({ disabled, onVerify }: { disabled: boolean; onVerify: (txId: string) => void }) {
+  const [txId, setTxId] = useState("");
+  return (
+    <form
+      className="row"
+      style={{ flexWrap: "nowrap" }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onVerify(txId);
+      }}
+    >
+      <label style={{ flex: 1 }}>
+        <span className="sr-only">Transaction id</span>
+        <input value={txId} onChange={(event) => setTxId(event.target.value.trim())} placeholder="Transaction id from your wallet" spellCheck={false} autoComplete="off" />
+      </label>
+      <button type="submit" disabled={disabled || !validTxId(txId)}>
+        Confirm on chain
+      </button>
+    </form>
+  );
+}
 
 export function PayrollDesk({
   id,
@@ -97,6 +98,20 @@ export function PayrollDesk({
   const canApprove = canOperate && state === "validated" && !invalid;
   const canSend = canOperate && ["authorized", "partially_completed", "failed"].includes(state);
   const canRecord = canOperate && !practice && ["authorized", "executing", "partially_completed", "failed"].includes(state);
+
+  async function verify(txId: string) {
+    setError("");
+    setPending(true);
+    try {
+      const result = await api<{ matched: number; confirmations: number }>(`/api/ash/payroll/${id}/verify`, { body: { txId } });
+      toast(`Found ${result.matched} ${result.matched === 1 ? "payment" : "payments"} in that transaction (${result.confirmations} confirmations).`);
+      router.refresh();
+    } catch (caught) {
+      setError(presentError(caught, "We couldn't confirm that transaction. Nothing changed."));
+    } finally {
+      setPending(false);
+    }
+  }
   const canCancel = canOperate && ["draft", "validated", "authorized"].includes(state);
   return (
     <div className="stack">
@@ -125,9 +140,6 @@ export function PayrollDesk({
                   {line.error ? <div className="muted">{line.error}</div> : null}
                 </td>
                 <td>
-                  {canRecord && (line.state === "ready" || line.state === "failed") ? (
-                    <RecordLine disabled={pending} onRecord={(txId) => post(`/api/ash/payroll/${id}/lines/${line.id}/record`, { txId })} />
-                  ) : null}
                   {practice && canOperate && line.state === "failed" ? (
                     <button type="button" onClick={() => post(`/api/ash/payroll/${id}/lines/${line.id}/retry`)} disabled={pending}>
                       Retry this person
@@ -145,12 +157,21 @@ export function PayrollDesk({
           {state === "completed" ? (
             <p className="banner ok">{practice ? "This run is finished. The practice payments were not sent on the network." : "This run is finished."}</p>
           ) : null}
-          {canRecord && walletUri ? (
+          {canRecord ? (
             <div className="wallet-step">
               <p>
-                <a href={walletUri}>Open every unpaid line in your wallet</a> as one payment request, or pay each address yourself.
+                {walletUri ? (
+                  <>
+                    <a href={walletUri}>Open every unpaid line in your wallet</a> as one payment, or pay each address yourself.
+                  </>
+                ) : (
+                  "Pay each unpaid line from your wallet."
+                )}
               </p>
-              <p className="muted">After sending, paste each transaction id on its line. ASH looks it up on a Zcash node. Seeing it does not prove the amount, so the run stays open until you reconcile it in your wallet.</p>
+              <p className="muted">
+                Then paste the transaction id. ASH reads the payments you sent with your full viewing key and marks each line paid once it has enough confirmations. Paste it again later to update the confirmations.
+              </p>
+              <VerifyRun disabled={pending} onVerify={verify} />
             </div>
           ) : null}
           <div className="row">

@@ -1,65 +1,64 @@
 # Zcash integration
 
-Network default: testnet. Set `ASH_ZCASH_NETWORK=mainnet` only when you mean it. This build does not broadcast on either network.
+ASH has three modes, switched in the app (sidebar or top of the screen on phones):
 
-Researched against the public protocol as of 26 October 2026, after NU6.3 Ironwood activation (block 3,428,143 on 28 July 2026).
+| Mode | Payments | Verification |
+| --- | --- | --- |
+| Practice | Labeled practice records. Nothing is sent. | None needed. |
+| Testnet | Real Zcash testnet transactions from the payer's wallet. | On chain, with the payee's viewing key. |
+| Mainnet | Real Zcash mainnet transactions from the payer's wallet. | On chain, with the payee's viewing key. |
 
-## What ASH implements
+Each mode is its own workspace. Records, offers, plans, and tip pages created in one mode are listed only in that mode.
 
-| Capability | In this build |
-| --- | --- |
-| Shielded address structure | Sapling and unified addresses are checked for prefix, checksum, and plausible length |
-| Transparent destinations | Rejected for payroll, tips, and the pay-to address |
-| Sprout | Rejected |
-| ZIP-321 | Built and parsed for one or many payments: address, decimal ZEC amount, unpadded base64url memo up to 512 bytes, label, message |
-| Transaction construction | Not implemented. A wallet must build the transaction |
-| Spending keys | Not stored and not requested |
-| Chain verification | Optional `getrawtransaction`. Existence and confirmation count only |
-| Diversified addresses | Not derived. Callers paste an address their wallet produced |
-| Viewing keys | Not stored. Grant screens describe what a UFVK or UIVK actually reveals |
-| FROST (ZIP-312) | Not implemented |
+## How a real payment works
 
-## Shielded pools
+1. The payee adds a receiving address and a viewing key for it under **Receiving keys**. ASH checks that the key derives the address (`pk_d = [ivk] DiversifyHash(d)`), that both are for the selected network, and rejects spending keys. The key is sealed with AES-256-GCM under `VIEWING_KEY_SECRET` and never returned.
+2. Starting a payment creates a payment request: the payee's Sapling receiver, the amount in zatoshi, and a unique memo `ASH <ref>`. The app shows a ZIP-321 link and a QR code.
+3. The payer's own wallet (Zashi, YWallet, or any wallet that honors ZIP-321 memos) builds, signs, and broadcasts the transaction. ASH never holds a spending key and cannot move funds.
+4. ASH finds the payment. It either scans new compact blocks from lightwalletd or checks a transaction id the payer pastes. Every Sapling output is trial-decrypted with the payee's incoming viewing key. A note counts only when all of these hold:
+   - it decrypts under the key and pays the requested Sapling receiver,
+   - its note commitment recomputes to the on-chain `cmu` (so a sender cannot claim a larger amount inside the ciphertext),
+   - the ephemeral key is derived from `rseed` as ZIP 212 requires,
+   - the value is at least the requested amount,
+   - the memo contains the request's reference,
+   - the output has not already satisfied another request.
+5. Once the transaction has the required confirmations, the flow unlocks: the tip receipt is signed, the file's release envelope is served, the subscription period moves, or the paid API reference is issued.
 
-NU6.3 sealed the Orchard pool for ordinary inter-user transfers. Wallets that pay an Orchard-protocol receiver now put value into the Ironwood pool. ZIP 326 says the same Orchard-protocol incoming viewing key trial-decrypts Orchard and Ironwood notes. Sapling still accepts new value. The Sprout freeze is a separate, later event and ASH already rejects Sprout addresses.
+Payroll runs the other way. The operator pays each line from their wallet (one ZIP-321 link can pay all unpaid lines), then gives ASH the transaction id. ASH recovers the wallet's outgoing notes with the operator's outgoing viewing key (from a full viewing key) and marks each line paid when a note to that line's Sapling address carries at least its amount.
 
-ASH does not reverse ZIP-316 F4Jumble, so a unified address checksum does not tell ASH whether the receivers are Sapling, Orchard-protocol, or transparent. The interface says that. A wallet may still reject an address that passed ASH's structural check, including a Sapling diversifier that is not a Jubjub point.
+## Confirmations
+
+| Network | Default | Setting |
+| --- | --- | --- |
+| Testnet | 1 | `ASH_CONFIRMATIONS_TESTNET` |
+| Mainnet | 3 | `ASH_CONFIRMATIONS_MAINNET` |
+
+`ASH_REQUIRED_CONFIRMATIONS` sets both when the specific values are absent. A seen but unconfirmed payment shows as "seen" and unlocks nothing.
+
+## Chain access and trust
+
+ASH reads the chain through lightwalletd over gRPC (HTTP/2). Defaults: `https://testnet.zec.rocks:443` and `https://zec.rocks:443`. Override with `ASH_LIGHTWALLETD_TESTNET` and `ASH_LIGHTWALLETD_MAINNET`.
+
+ASH trusts lightwalletd to report block heights and transaction bytes honestly, as any light client that does not validate headers does. Amounts, recipients, and memos are verified cryptographically, so lightwalletd cannot invent a payment that decrypts to the payee's key and matches its commitment. It could hide a payment or misreport confirmations. Run your own lightwalletd for higher assurance.
+
+## Pools
+
+ASH verifies Sapling notes. Payment requests always use the Sapling receiver of the payee's address, so a unified address must include a Sapling receiver. Wallets paying a Sapling address create a Sapling output even when they spend from Orchard. Orchard and Ironwood note verification is not implemented.
+
+Transactions are parsed in the v4, v5, and v6 formats. Testnet v6 transactions use the v5 layout up to the Sapling outputs (checked against live data). A misread can only fail closed, because every note must match its on-chain commitment.
+
+## What is checked against official vectors
+
+`tests/sapling.test.ts` and `tests/unified.test.ts` run the zcash-test-vectors for Sapling generators, key components (ak, nk, ivk, pk_d, note commitments), note encryption with ivk and ovk (full and compact ciphertexts), F4Jumble, unified addresses, and unified full and incoming viewing keys. `tests/networks.test.ts` runs every flow on both networks against genuinely encrypted notes, including wrong memos, short amounts, forged commitments, unconfirmed payments, and reused outputs.
 
 ## ZIP-321
 
-Active ZIP-321 uses a `zcash:` URI. A single payment puts the address in the hier-part. Multiple payments use `address.1`, `address.2`, with no leading zeros. `amount` is a decimal ZEC string with at most 8 fractional digits. `memo` is unpadded base64url and is invalid on a transparent address.
+Active ZIP-321 uses a `zcash:` URI. A single payment puts the address in the hier-part. Multiple payments use `address.1`, `address.2`. `amount` is a decimal ZEC string with at most 8 fractional digits. `memo` is unpadded base64url and is invalid on a transparent address.
 
-Wallets that support ZIP-321, shielded sends, and exact memo bytes can open the link. ASH does not know whether a particular wallet will preserve the memo. The tip page says the link is a request, not a payment.
+## Viewing keys and audit grants
 
-The default pay-to and the payroll examples use this unfunded structural testnet fixture:
+Receiving keys are separate from audit grants. A receiving key lets ASH confirm payments into that account. It reveals every payment into the account, so a dedicated receiving account is advised. Audit grants remain disclosures: ASH never stores a viewing key for a reviewer, and an application expiry does not revoke a key someone copied.
 
-`ztestsapling1qv2z2dj8tp5h4zuu4klvlc83qgfjgd2x2a58nz5m4j7uahlsqyfzxdz92enh3zv64w7v6mc0v32`
+## Not implemented
 
-It is not a live recipient. Set `ASH_PAY_TO` to an address you control before asking anyone to pay.
-
-## Viewing keys
-
-A unified full viewing key (`uview`) and a unified incoming viewing key (`uivk`) reveal the account those keys were derived for. They do not spend. They cannot be scoped to one diversifier or one date by the key itself. ASH cannot force a recipient to forget notes they already decrypted. Grant expiry is an application clock. The grant object sets `cryptographicRevocation` to false and `stillUsableCryptographically` to true for `ufvk` and `uivk`.
-
-A filtered report is different. ASH stores text the owner typed and can stop serving it. That is not a chain proof.
-
-## Transaction verification
-
-`observeTransaction` calls `getrawtransaction` with verbose output. A successful result becomes status `observed` with the node's confirmation count. The reason string says the shielded amount and recipient are not visible from that call. A missing RPC URL, an HTTP error, or an RPC error becomes `unresolved`.
-
-`paymentSatisfies` accepts:
-
-- `mode: simulated` and `status: verified`, and only when simulated payments are enabled
-- `mode: chain_observation` and `status: confirmed`, with confirmations at least `ASH_REQUIRED_CONFIRMATIONS`
-
-Nothing in `src/zcash/chain.ts` sets `confirmed`. A transaction id, a screenshot, or a confirmation count is not proof of amount or recipient. Do not treat an unconfirmed observation as final. Shielded transactions are not instant, and a zero-confirmation policy is not offered.
-
-## Payment adapter modes
-
-`ASH_PAYMENT_MODE=simulated` writes a labeled ledger row and a synthetic id prefixed with `sim_`. The receipt verification level is `simulated`.
-
-`ASH_PAYMENT_MODE=chain` disables the simulated settle path. Callers must pass a 64-character transaction id. The resulting status is `observed` or `unresolved`, and release rules fail closed.
-
-## Unsupported
-
-Broadcast, PCZT, lightwalletd, ZIP-321 request acknowledgements from a wallet, diversified address derivation, viewing-key trial decryption, payment detection from a viewing key, Orchard/Ironwood note construction, and FROST threshold signing.
+ASH does not construct or broadcast transactions, hold spending keys, derive diversified addresses, verify Orchard or Ironwood notes, validate block headers, or perform FROST threshold signing.

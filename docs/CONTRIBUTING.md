@@ -20,7 +20,7 @@ pnpm dev
 | Path | Role |
 | --- | --- |
 | `src/domain` | Money, states, payment policy |
-| `src/zcash` | Addresses, ZIP-321, RPC observation |
+| `src/zcash` | Addresses, ZIP-321, Sapling note decryption, unified encodings, lightwalletd, payment verification |
 | `src/crypto` | AES-GCM, Shamir, signatures, the sum proof |
 | `src/services` | Workflows. New payment code goes through `settleSimulated` or `settleObserved` |
 | `src/server` | Config, cookies, HTTP, the dispatcher |

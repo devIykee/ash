@@ -1,3 +1,4 @@
+import { pageRead } from "@/server/page-data";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,7 +9,6 @@ import { zatoshiToZec } from "@/domain/money";
 import { AshError } from "@/domain/errors";
 import { getOffer } from "@/services/exchange";
 import { currentActor } from "@/server/current";
-import { getStore } from "@/server/store";
 
 export const metadata = { title: "Offer" };
 
@@ -16,7 +16,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const actor = await currentActor();
   try {
-    const offer = await getStore().read((tx) => getOffer(tx, id, actor));
+    const offer = await pageRead((tx) => getOffer(tx, id, actor));
     const price = `${zatoshiToZec(BigInt(offer.priceZatoshi))} ZEC`;
     return (
       <div className="stack">
