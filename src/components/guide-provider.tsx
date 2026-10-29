@@ -84,9 +84,9 @@ export function GuideProvider({ children }: { children: ReactNode }) {
       params.delete("step");
       const query = params.toString();
       window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
-    } else if (pathname === "/workspace" && !storage.get("ash.welcome")) {
-      setWelcome(true);
     }
+    // The workspace now walks people through choosing a person and a next step, so the welcome
+    // dialog opens only when someone asks for the tour from Help.
     const media = window.matchMedia("(max-width: 760px)");
     const apply = () => setNarrow(media.matches);
     apply();

@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PERSONAS } from "@/domain/types";
 import type { Actor } from "@/services/common";
@@ -19,6 +19,11 @@ export const currentActor = cache(async function currentActor(): Promise<Actor |
 
 export async function requireActor(): Promise<Actor> {
   const actor = await currentActor();
-  if (!actor) redirect("/workspace");
+  if (!actor) {
+    // Remember where they were going, so choosing a person lands them there.
+    const path = (await headers()).get("x-ash-path") ?? "";
+    const next = path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/workspace") ? path : "";
+    redirect(next ? `/workspace?next=${encodeURIComponent(next)}` : "/workspace");
+  }
   return actor;
 }
