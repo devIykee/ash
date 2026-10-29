@@ -46,7 +46,7 @@ URL: https://ash-nu-khaki.vercel.app
 
 Repository: https://github.com/devIykee/ash
 
-Video: to be recorded before submission.
+Video: submitted with the entry.
 
 Local steps are in [docs/DEMO.md](docs/DEMO.md). The live site checks itself with `ASH_BASE_URL=https://ash-nu-khaki.vercel.app SMOKE_MODE=testnet pnpm smoke` (also `practice` and `mainnet`).
 
